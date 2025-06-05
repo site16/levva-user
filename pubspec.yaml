@@ -1,0 +1,61 @@
+name: levva
+description: "A new Flutter project."
+publish_to: 'none' # Remove this line if you intend to publish to pub.dev
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.7.2 <4.0.0' # Mantendo a sua especificação, mas certifique-se de que está a usar esta versão do Dart SDK.
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  geolocator: ^14.0.0 # Parece ser uma versão muito recente, verifique a compatibilidade se tiver problemas. Última estável é ~11.0.0 ou ~12.0.0
+  mask_text_input_formatter: ^2.9.0
+  flutter_svg: ^2.0.7 # Se estiver a usar
+  intl: ^0.19.0 # Versão corrigida (última estável)
+  url_launcher: ^6.3.1
+  image_picker: ^1.1.2
+  firebase_auth: ^5.5.3 # Verifique se esta é a versão correta para o seu firebase_core
+  google_sign_in: ^6.3.0
+  cloud_firestore: ^5.6.7 # Verifique se esta é a versão correta para o seu firebase_core
+  firebase_storage: ^12.4.5 # Verifique se esta é a versão correta para o seu firebase_core
+  provider: ^6.1.1
+  firebase_core: ^3.13.0 # Verifique se todas as dependências Firebase são compatíveis com esta versão do core
+  google_maps_flutter: ^2.6.0
+  # google_maps_webservice: ^0.0.20+4 # REMOVIDO devido à incompatibilidade com Dart 3+
+  flutter_polyline_points: ^2.0.0
+  http: ^1.2.1 # ADICIONADO para chamadas HTTP às APIs do Google Maps
+  firebase_app_check: ^0.3.2+5
+  shared_preferences: ^2.0.15
+  lottie: ^3.1.2
+  uuid: ^4.3.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0 # Verifique a versão mais recente, ex: ^4.0.0
+  flutter_launcher_icons: ^0.13.1 # Versão corrigida (última estável)
+  share_plus: ^11.0.0
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/levva_icon.png
+    - assets/images/levva_icon_transp.png
+    - assets/images/bike.png
+    - assets/images/levva_icon_transp_branco.png
+    - assets/images/bike_woman.png
+    - assets/images/motoka.png
+    - assets/images/Entregador acenando.png
+    - assets/images/bike_espera.png
+    - assets/animations/confirmed.json
+   
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/levva_icon_transp_branco.png"
+  adaptive_icon_background: "#000000"
+  adaptive_icon_foreground: "assets/images/levva_icon_transp_branco.png"
