@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:levva/models/enums.dart';
 import '../models/ride_detail_model.dart';
 import '../services/firestore_service.dart';
 import 'ride_request_provider.dart'; // Para verificar se a corrida é "ao vivo" e obter status/dados ao vivo

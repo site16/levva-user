@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:levva/models/enums.dart';
 import 'package:provider/provider.dart';
-import '../providers/ride_request_provider.dart'; // Para obter o status e detalhes da corrida
+import '../providers/ride_request_provider.dart';
 
 class RideInProgressPanel extends StatelessWidget {
   const RideInProgressPanel({super.key});
 
-  // Função auxiliar para obter o texto de status da corrida para o usuário
   String _getDisplayStatus(
     RideRequestStatus status,
     RideRequestProvider provider,
@@ -13,7 +13,6 @@ class RideInProgressPanel extends StatelessWidget {
     switch (status) {
       case RideRequestStatus.rideAccepted:
         return 'Entregador confirmado!';
-      // CORRIGIDO: Usar o nome correto do enum
       case RideRequestStatus.driverEnRouteToPickup:
         return 'Entregador a caminho da coleta';
       case RideRequestStatus.driverArrivedAtPickup:
@@ -25,13 +24,11 @@ class RideInProgressPanel extends StatelessWidget {
     }
   }
 
-  // Função auxiliar para obter o ETA a ser exibido
   String? _getDisplayEta(
     RideRequestStatus status,
     RideRequestProvider provider,
   ) {
     switch (status) {
-      // CORRIGIDO: Usar o nome correto do enum
       case RideRequestStatus.driverEnRouteToPickup:
         return provider.assignedDriverEtaToPickup;
       case RideRequestStatus.driverArrivedAtPickup:
@@ -89,7 +86,6 @@ class RideInProgressPanel extends StatelessWidget {
     final rideProvider = Provider.of<RideRequestProvider>(context);
     final theme = Theme.of(context);
 
-    // Esta verificação garante que o painel só apareça para status ativos relevantes
     if (rideProvider.status.index < RideRequestStatus.rideAccepted.index ||
         rideProvider.status.index >= RideRequestStatus.rideCompleted.index) {
       return const SizedBox.shrink();
@@ -156,20 +152,18 @@ class RideInProgressPanel extends StatelessWidget {
                                     .assignedDriverProfileImageUrl!
                                     .isNotEmpty
                             ? NetworkImage(
-                              rideProvider.assignedDriverProfileImageUrl!,
-                            )
+                                rideProvider.assignedDriverProfileImageUrl!,
+                              )
                             : null,
-                    child:
-                        (rideProvider.assignedDriverProfileImageUrl == null ||
-                                rideProvider
-                                    .assignedDriverProfileImageUrl!
-                                    .isEmpty)
-                            ? Icon(
-                              Icons.person,
-                              size: 28,
-                              color: Colors.grey.shade500,
-                            )
-                            : null,
+                    child: (rideProvider.assignedDriverProfileImageUrl == null ||
+                            rideProvider
+                                .assignedDriverProfileImageUrl!.isEmpty)
+                        ? Icon(
+                            Icons.person,
+                            size: 28,
+                            color: Colors.grey.shade500,
+                          )
+                        : null,
                   ),
                   const SizedBox(width: 12.0),
                   Expanded(
@@ -184,8 +178,7 @@ class RideInProgressPanel extends StatelessWidget {
                         ),
                         if (rideProvider.assignedDriverVehicleDetails != null &&
                             rideProvider
-                                .assignedDriverVehicleDetails!
-                                .isNotEmpty)
+                                .assignedDriverVehicleDetails!.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(top: 2.0),
                             child: Text(

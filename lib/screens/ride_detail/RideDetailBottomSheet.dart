@@ -414,7 +414,7 @@ class RideDetailBottomSheet extends StatelessWidget {
                             initialZoom: 13.0,
                             markers: markers,
                             polylines: polylinesSet,
-                            routeBoundsToFit: boundsToFit,
+                            routeBoundsToFit: boundsToFit, customMapStyleJsonPath: '',
                             // customMapStyleJsonPath: 'assets/map_styles/map_style_levva.json',
                           ),
                         ),

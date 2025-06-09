@@ -1,205 +1,176 @@
+// ... imports mantidos como antes ...
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:levva/widgets/delivery_options_bottom_sheet.dart';
-import 'dart:ui'; // Para ImageFilter
+import 'package:levva/widgets/pin_on_map_screen.dart';
 import 'package:provider/provider.dart';
-
-// Importações Corretas:
-import '../../providers/ride_request_provider.dart'; // Importa RideRequestProvider, RideRequestStatus, PlaceDetail
-import '../widgets/pulsing_logo_loader.dart'; // Importa o loader personalizado
-
-// AS DEFINIÇÕES DUPLICADAS DE RideRequestStatus, PlaceDetail, e RideRequestProvider FORAM REMOVIDAS DAQUI.
+import '../../providers/ride_request_provider.dart';
+import '../widgets/pulsing_logo_loader.dart';
 
 class AddressSearchBottomSheet extends StatefulWidget {
   const AddressSearchBottomSheet({super.key});
 
   @override
-  State<AddressSearchBottomSheet> createState() =>
-      _AddressSearchBottomSheetState();
+  State<AddressSearchBottomSheet> createState() => _AddressSearchBottomSheetState();
 }
 
 class _AddressSearchBottomSheetState extends State<AddressSearchBottomSheet> {
   final TextEditingController _originController = TextEditingController();
   final TextEditingController _destinationController = TextEditingController();
 
-  List<Map<String, String>> _originAutocompleteResults = [];
   List<Map<String, String>> _destinationAutocompleteResults = [];
 
-  final FocusNode _originFocusNode = FocusNode();
   final FocusNode _destinationFocusNode = FocusNode();
 
-  Timer? _debounceOrigin;
   Timer? _debounceDestination;
 
-  bool _isLoadingOriginSuggestions = false;
   bool _isLoadingDestinationSuggestions = false;
   bool _canProceed = false;
+  bool _isDisposed = false;
+  bool _isGettingLocation = false;
 
-  // Caminho para o logo (ajuste se necessário, ou passe como parâmetro)
-  static const String _logoPath =
-      'assets/images/levva_icon_transp.png'; // Logo colorido para fundo claro
-  // static const String _logoPathWhite = 'assets/images/levva_icon_transp_branco.png'; // Logo branco
+  Position? _userPosition;
+  String? _userCity;
+
+  static const String _logoPath = 'assets/images/levva_icon_transp.png';
 
   @override
   void initState() {
     super.initState();
+    _getUserLocation();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _isDisposed) return;
       final rideRequestProvider = Provider.of<RideRequestProvider>(
         context,
         listen: false,
       );
-      print(
-        "AddressSearchBottomSheet initState: Verificando provider inicial...",
-      );
       if (rideRequestProvider.origin != null) {
         _originController.text = rideRequestProvider.origin!.name;
-        print(
-          "AddressSearchBottomSheet initState: Origem do provider preenchida: ${rideRequestProvider.origin!.name}",
-        );
       } else {
-        _originController.text =
-            ""; // Garante que esteja vazio se não houver origem
-        print(
-          "AddressSearchBottomSheet initState: Nenhuma origem no provider.",
-        );
+        _originController.text = "";
       }
       if (rideRequestProvider.destination != null) {
         _destinationController.text = rideRequestProvider.destination!.name;
-        print(
-          "AddressSearchBottomSheet initState: Destino do provider preenchido: ${rideRequestProvider.destination!.name}",
-        );
-      } else {
-        print(
-          "AddressSearchBottomSheet initState: Nenhum destino no provider.",
-        );
       }
       _updateCanProceed();
     });
 
-    _originController.addListener(() {
-      _updateCanProceed();
-      if (_originFocusNode.hasFocus) {
-        if (_debounceOrigin?.isActive ?? false) _debounceOrigin!.cancel();
-        _debounceOrigin = Timer(const Duration(milliseconds: 400), () {
-          if (_originController.text.length > 2) {
-            _searchAddress(_originController.text, true);
-          } else {
-            if (mounted) setState(() => _originAutocompleteResults = []);
-          }
-        });
-      }
-    });
+    _destinationController.addListener(_destinationListener);
+    _destinationFocusNode.addListener(_destinationFocusListener);
+  }
 
-    _destinationController.addListener(() {
-      _updateCanProceed();
-      if (_destinationFocusNode.hasFocus) {
-        if (_debounceDestination?.isActive ?? false)
-          _debounceDestination!.cancel();
-        _debounceDestination = Timer(const Duration(milliseconds: 400), () {
-          if (_destinationController.text.length > 2) {
-            _searchAddress(_destinationController.text, false);
-          } else {
-            if (mounted) setState(() => _destinationAutocompleteResults = []);
-          }
-        });
+  Future<void> _getUserLocation() async {
+    setStateSafe(() => _isGettingLocation = true);
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        await Geolocator.openLocationSettings();
+        setStateSafe(() => _isGettingLocation = false);
+        return;
       }
-    });
 
-    _originFocusNode.addListener(() {
-      if (!_originFocusNode.hasFocus && mounted) {
-        Future.delayed(const Duration(milliseconds: 200), () {
-          // Delay para permitir clique na lista
-          if (mounted && !_originFocusNode.hasFocus) {
-            // Verifica novamente se o foco ainda não voltou
-            setState(() => _originAutocompleteResults = []);
-          }
-        });
-      } else if (_originFocusNode.hasFocus &&
-          _originController.text.length > 2 &&
-          mounted) {
-        _searchAddress(
-          _originController.text,
-          true,
-        ); // Busca ao focar se já houver texto
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.deniedForever ||
+            permission == LocationPermission.denied) {
+          setStateSafe(() => _isGettingLocation = false);
+          return;
+        }
       }
-    });
 
-    _destinationFocusNode.addListener(() {
-      if (!_destinationFocusNode.hasFocus && mounted) {
-        Future.delayed(const Duration(milliseconds: 200), () {
-          if (mounted && !_destinationFocusNode.hasFocus) {
-            setState(() => _destinationAutocompleteResults = []);
-          }
-        });
-      } else if (_destinationFocusNode.hasFocus &&
-          _destinationController.text.length > 2 &&
-          mounted) {
-        _searchAddress(_destinationController.text, false);
+      final pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      _userPosition = pos;
+      final placemarks = await placemarkFromCoordinates(pos.latitude, pos.longitude);
+      if (placemarks.isNotEmpty) {
+        _userCity = placemarks.first.locality;
       }
-    });
+      setStateSafe(() {});
+    } catch (e) {
+      debugPrint('Erro ao obter localização: $e');
+    } finally {
+      setStateSafe(() => _isGettingLocation = false);
+    }
+  }
+
+  void _destinationListener() {
+    _updateCanProceed();
+    if (_destinationFocusNode.hasFocus) {
+      _debounceDestination?.cancel();
+      _debounceDestination = Timer(const Duration(milliseconds: 400), () {
+        if (!mounted || _isDisposed) return;
+        if (_destinationController.text.length > 2) {
+          _searchAddress(_destinationController.text);
+        } else {
+          setStateSafe(() => _destinationAutocompleteResults = []);
+        }
+      });
+    }
+  }
+
+  void _destinationFocusListener() {
+    if (!_destinationFocusNode.hasFocus && mounted && !_isDisposed) {
+      Future.delayed(const Duration(milliseconds: 200), () {
+        if (!mounted || _isDisposed) return;
+        if (!_destinationFocusNode.hasFocus) {
+          setStateSafe(() => _destinationAutocompleteResults = []);
+        }
+      });
+    } else if (_destinationFocusNode.hasFocus &&
+        _destinationController.text.length > 2 &&
+        mounted && !_isDisposed) {
+      _searchAddress(_destinationController.text);
+    }
   }
 
   void _updateCanProceed() {
-    if (!mounted) return;
+    if (!mounted || _isDisposed) return;
     final rideProvider = Provider.of<RideRequestProvider>(
       context,
       listen: false,
     );
-    final bool originTextNotEmpty = _originController.text.isNotEmpty;
+    final bool originFilled = _originController.text.isNotEmpty && rideProvider.origin != null;
     final bool destinationTextNotEmpty = _destinationController.text.isNotEmpty;
-    final bool providerOriginSet = rideProvider.origin != null;
     final bool providerDestinationSet = rideProvider.destination != null;
 
-    // Para prosseguir, ambos os campos de texto devem ter algum conteúdo E
-    // ambos (origem e destino) devem ter sido definidos no provider (ou seja, selecionados da lista).
     final bool canProceedNow =
-        originTextNotEmpty &&
+        originFilled &&
         destinationTextNotEmpty &&
-        providerOriginSet &&
         providerDestinationSet;
 
-    // Debug prints (remover em produção)
-    // print("--- _updateCanProceed ---");
-    // print("Origin Text: '${_originController.text}', Provider Origin Set: $providerOriginSet (Nome: ${rideProvider.origin?.name})");
-    // print("Dest Text: '${_destinationController.text}', Provider Dest Set: $providerDestinationSet (Nome: ${rideProvider.destination?.name})");
-    // print("Can Proceed Now: $canProceedNow, Current _canProceed State: $_canProceed");
-    // print("-------------------------");
-
     if (canProceedNow != _canProceed) {
-      setState(() {
+      setStateSafe(() {
         _canProceed = canProceedNow;
       });
     }
   }
 
-  Future<void> _searchAddress(String query, bool isOrigin) async {
-    if (!mounted) return;
+  Future<void> _searchAddress(String query) async {
+    if (!mounted || _isDisposed) return;
     final rideProvider = Provider.of<RideRequestProvider>(
       context,
       listen: false,
     );
-
-    setState(() {
-      if (isOrigin)
-        _isLoadingOriginSuggestions = true;
-      else
-        _isLoadingDestinationSuggestions = true;
-    });
+    setStateSafe(() => _isLoadingDestinationSuggestions = true);
 
     try {
       final results = await rideProvider.getAutocompleteSuggestions(query);
-      if (mounted) {
-        setState(() {
-          if (isOrigin) {
-            _originAutocompleteResults = results;
-          } else {
-            _destinationAutocompleteResults = results;
-          }
+      if (!mounted || _isDisposed) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        setStateSafe(() {
+          _destinationAutocompleteResults = results;
         });
-      }
+      });
     } catch (e) {
-      print("AddressSearchBottomSheet: Erro ao buscar sugestões: $e");
-      if (mounted) {
+      if (!mounted || _isDisposed) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -208,16 +179,110 @@ class _AddressSearchBottomSheetState extends State<AddressSearchBottomSheet> {
             backgroundColor: Colors.redAccent,
           ),
         );
-      }
+      });
     } finally {
-      if (mounted) {
-        setState(() {
-          if (isOrigin)
-            _isLoadingOriginSuggestions = false;
-          else
-            _isLoadingDestinationSuggestions = false;
+      if (!mounted || _isDisposed) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        setStateSafe(() {
+          _isLoadingDestinationSuggestions = false;
         });
+      });
+    }
+  }
+
+  /// Botão para localização atual
+  Future<void> _useCurrentLocationAsOrigin() async {
+    if (_userPosition == null) {
+      await _getUserLocation();
+      if (_userPosition == null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Não foi possível obter sua localização atual."),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        });
+        return;
       }
+    }
+    final rideProvider = Provider.of<RideRequestProvider>(
+      context,
+      listen: false,
+    );
+    setStateSafe(() => _isGettingLocation = true);
+    try {
+      final placemarks = await placemarkFromCoordinates(
+        _userPosition!.latitude,
+        _userPosition!.longitude,
+      );
+      String address = placemarks.isNotEmpty
+          ? "${placemarks.first.street}, ${placemarks.first.locality}"
+          : "Local Atual";
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _originController.text = address;
+      });
+      await rideProvider.setOrigin(
+        LatLng(_userPosition!.latitude, _userPosition!.longitude),
+        address,
+        address: address,
+        placeId: "current-location",
+      );
+      _updateCanProceed();
+    } catch (e) {
+      debugPrint('Erro ao usar localização atual como origem: $e');
+    } finally {
+      setStateSafe(() => _isGettingLocation = false);
+    }
+  }
+
+  /// Botão do alfinete (origem)
+  Future<void> _selectOnMapOrigin() async {
+    final result = await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PinOnMapScreen(
+          title: "Selecione a origem",
+          initialPosition: _userPosition != null
+              ? LatLng(_userPosition!.latitude, _userPosition!.longitude)
+              : const LatLng(-15.3250, -49.1510),
+        ),
+      ),
+    );
+
+    if (result != null && result is Map) {
+      final LatLng latLng = result['latLng'] as LatLng;
+      final String address = result['address'] as String? ?? '';
+      final rideProvider = Provider.of<RideRequestProvider>(context, listen: false);
+
+      _originController.text = address;
+      await rideProvider.setOrigin(latLng, address, address: address, placeId: "pin-on-map");
+      _updateCanProceed();
+      FocusScope.of(context).requestFocus(_destinationFocusNode);
+    }
+  }
+
+  /// Botão do alfinete (destino)
+  Future<void> _selectOnMapDestination() async {
+    final result = await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PinOnMapScreen(
+          title: "Selecione o destino",
+          initialPosition: _userPosition != null
+              ? LatLng(_userPosition!.latitude, _userPosition!.longitude)
+              : const LatLng(-15.3250, -49.1510),
+        ),
+      ),
+    );
+
+    if (result != null && result is Map) {
+      final LatLng latLng = result['latLng'] as LatLng;
+      final String address = result['address'] as String? ?? '';
+      final rideProvider = Provider.of<RideRequestProvider>(context, listen: false);
+
+      _destinationController.text = address;
+      await rideProvider.setDestination(latLng, address, address: address, placeId: "pin-on-map");
+      _updateCanProceed();
+      FocusScope.of(context).unfocus();
     }
   }
 
@@ -225,7 +290,7 @@ class _AddressSearchBottomSheetState extends State<AddressSearchBottomSheet> {
     Map<String, String> placeData,
     bool isOrigin,
   ) async {
-    if (!mounted) return;
+    if (!mounted || _isDisposed) return;
     final rideProvider = Provider.of<RideRequestProvider>(
       context,
       listen: false,
@@ -233,53 +298,38 @@ class _AddressSearchBottomSheetState extends State<AddressSearchBottomSheet> {
     final String description = placeData['description']!;
     final String placeId = placeData['place_id']!;
 
-    // Mostra feedback visual que algo está acontecendo
-    setState(() {
-      if (isOrigin) {
-        _isLoadingOriginSuggestions = true; // Reutiliza o loader
-        _originController.text = description; // Atualiza o texto imediatamente
-        _originAutocompleteResults = [];
-      } else {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      setStateSafe(() {
         _isLoadingDestinationSuggestions = true;
         _destinationController.text = description;
         _destinationAutocompleteResults = [];
-      }
+      });
     });
 
     try {
-      final PlaceDetail? placeDetail = await rideProvider
+      final placeDetail = await rideProvider
           .getPlaceDetailsFromPlaceId(placeId, description);
 
+      if (!mounted || _isDisposed) return;
+
       if (placeDetail != null) {
-        if (isOrigin) {
-          await rideProvider.setOrigin(
-            placeDetail.location,
-            placeDetail.name,
-            address: placeDetail.address,
-            placeId: placeDetail.placeId,
-          );
-          // _originController.text já foi atualizado
-          if (mounted)
-            FocusScope.of(context).requestFocus(_destinationFocusNode);
-        } else {
-          await rideProvider.setDestination(
-            placeDetail.location,
-            placeDetail.name,
-            address: placeDetail.address,
-            placeId: placeDetail.placeId,
-          );
-          // _destinationController.text já foi atualizado
-          if (mounted) FocusScope.of(context).unfocus();
-        }
-        _updateCanProceed(); // Importante chamar após definir no provider
+        await rideProvider.setDestination(
+          placeDetail.location,
+          placeDetail.name,
+          address: placeDetail.address,
+          placeId: placeDetail.placeId,
+        );
+        if (mounted && !_isDisposed)
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            FocusScope.of(context).unfocus();
+          });
+        _updateCanProceed();
       } else {
         throw Exception("Detalhes do local não encontrados.");
       }
     } catch (e) {
-      print(
-        "AddressSearchBottomSheet _selectPlace: Erro ao selecionar local: $e",
-      );
-      if (mounted) {
+      if (!mounted || _isDisposed) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -288,166 +338,213 @@ class _AddressSearchBottomSheetState extends State<AddressSearchBottomSheet> {
             backgroundColor: Colors.redAccent,
           ),
         );
-        // Reverte o texto se a seleção falhar
-        setState(() {
-          if (isOrigin)
-            _originController.clear();
-          else
-            _destinationController.clear();
+        setStateSafe(() {
+          _destinationController.clear();
         });
-      }
+      });
     } finally {
-      if (mounted) {
-        setState(() {
-          // Limpa os loaders independentemente do resultado
-          _isLoadingOriginSuggestions = false;
+      if (!mounted || _isDisposed) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        setStateSafe(() {
           _isLoadingDestinationSuggestions = false;
         });
-      }
+      });
     }
   }
 
   void _proceedToDeliveryOptions() {
-    if (!mounted) return;
+    if (!mounted || _isDisposed) return;
     final rideProvider = Provider.of<RideRequestProvider>(
       context,
       listen: false,
     );
-
-    _updateCanProceed(); // Garante que _canProceed está atualizado antes de verificar
-
+    _updateCanProceed();
     if (_canProceed) {
-      Navigator.of(context).pop(); // Fecha o AddressSearchBottomSheet
-
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        builder: (BuildContext bc) {
-          return ChangeNotifierProvider.value(
-            value: rideProvider,
-            child: const DeliveryOptionsBottomSheet(),
-          );
-        },
-      );
+      Navigator.of(context).pop();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          builder: (BuildContext bc) {
+            return ChangeNotifierProvider.value(
+              value: rideProvider,
+              child: const DeliveryOptionsBottomSheet(),
+            );
+          },
+        );
+      });
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Selecione uma origem e um destino válidos da lista."),
-          backgroundColor: Colors.orangeAccent,
-        ),
-      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Selecione uma origem e um destino válidos da lista."),
+            backgroundColor: Colors.orangeAccent,
+          ),
+        );
+      });
+    }
+  }
+
+  void setStateSafe(VoidCallback fn) {
+    if (mounted && !_isDisposed) {
+      if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.idle ||
+          SchedulerBinding.instance.schedulerPhase == SchedulerPhase.postFrameCallbacks) {
+        setState(fn);
+      } else {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && !_isDisposed) setState(fn);
+        });
+      }
     }
   }
 
   @override
   void dispose() {
+    _isDisposed = true;
+    _debounceDestination?.cancel();
+    _destinationController.removeListener(_destinationListener);
+    _destinationFocusNode.removeListener(_destinationFocusListener);
     _originController.dispose();
     _destinationController.dispose();
-    _originFocusNode.dispose();
     _destinationFocusNode.dispose();
-    _debounceOrigin?.cancel();
-    _debounceDestination?.cancel();
     super.dispose();
   }
 
-  Widget _buildAddressTextFieldWidget({
-    required TextEditingController controller,
-    required FocusNode focusNode,
-    required String hintText,
-    required IconData leadingIcon,
-    required bool isOriginField, // Para o ícone do pin
-  }) {
-    return TextField(
-      controller: controller,
-      focusNode: focusNode,
-      style: const TextStyle(fontSize: 16, color: Colors.black87),
-      cursorColor: Colors.black,
-      decoration: InputDecoration(
-        hintText: hintText,
-        hintStyle: TextStyle(color: Colors.grey.shade500),
-        prefixIcon: Icon(leadingIcon, color: Colors.black87, size: 22),
-        suffixIcon: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (controller.text.isNotEmpty)
-              IconButton(
-                icon: const Icon(Icons.clear, color: Colors.grey, size: 20),
-                onPressed: () {
-                  controller.clear();
-                  final rideProvider = Provider.of<RideRequestProvider>(
-                    context,
-                    listen: false,
-                  );
-                  if (isOriginField) {
-                    rideProvider.clearOrigin();
-                    if (mounted)
-                      setState(() => _originAutocompleteResults = []);
-                  } else {
-                    rideProvider.clearDestination();
-                    if (mounted)
-                      setState(() => _destinationAutocompleteResults = []);
-                  }
-                  _updateCanProceed(); // Atualiza o estado do botão Continuar
-                },
+  /// Campo de endereço bloqueado + botões (origem)
+  Widget _buildOriginFieldUI() {
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            key: const ValueKey("originFieldLocked"),
+            controller: _originController,
+            enabled: false,
+            style: const TextStyle(fontSize: 16, color: Colors.black87),
+            decoration: InputDecoration(
+              hintText: 'Ponto de Partida',
+              hintStyle: TextStyle(color: Colors.grey.shade500),
+              prefixIcon: null,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
               ),
-            // O onPinTap foi removido temporariamente conforme seu código anterior.
-            // Se precisar dele, descomente e passe a função.
-            // if (onPinTap != null)
-            //   IconButton(
-            //     icon: const Icon(Icons.push_pin_outlined, color: Colors.black87, size: 22),
-            //     onPressed: onPinTap,
-            //     tooltip: 'Marcar no mapa',
-            //   ),
-          ],
+              filled: true,
+              fillColor: Colors.grey.shade100,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12.0),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12.0),
+                borderSide: BorderSide(color: Colors.grey.shade200),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12.0),
+                borderSide: const BorderSide(color: Colors.black, width: 1.5),
+              ),
+            ),
+          ),
         ),
-        filled: true,
-        fillColor: Colors.grey.shade100,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 14,
+        const SizedBox(width: 6),
+        IconButton(
+          icon: const Icon(Icons.my_location, color: Colors.blue, size: 26),
+          tooltip: "Usar minha localização",
+          onPressed: _isGettingLocation ? null : _useCurrentLocationAsOrigin,
         ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12.0),
-          borderSide: BorderSide.none,
+        IconButton(
+          icon: const Icon(Icons.push_pin_outlined, color: Colors.black87, size: 26),
+          tooltip: "Selecionar no mapa",
+          onPressed: _isGettingLocation ? null : _selectOnMapOrigin,
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12.0),
-          borderSide: BorderSide(color: Colors.grey.shade200),
+      ],
+    );
+  }
+
+  /// Campo de destino + botão alfinete (editável normalmente)
+  Widget _buildDestinationFieldUI() {
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            key: const ValueKey("destinationField"),
+            controller: _destinationController,
+            focusNode: _destinationFocusNode,
+            style: const TextStyle(fontSize: 16, color: Colors.black87),
+            cursorColor: Colors.black,
+            decoration: InputDecoration(
+              hintText: 'Para onde vamos?',
+              hintStyle: TextStyle(color: Colors.grey.shade500),
+              prefixIcon: const Icon(Icons.location_on_outlined, color: Colors.black87, size: 22),
+              suffixIcon: _destinationController.text.isNotEmpty && !_isLoadingDestinationSuggestions
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, color: Colors.grey, size: 20),
+                      onPressed: () {
+                        _destinationController.clear();
+                        final rideProvider = Provider.of<RideRequestProvider>(
+                          context,
+                          listen: false,
+                        );
+                        rideProvider.clearDestination();
+                        setStateSafe(() => _destinationAutocompleteResults = []);
+                        _updateCanProceed();
+                      },
+                    )
+                  : null,
+              filled: true,
+              fillColor: Colors.grey.shade100,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12.0),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12.0),
+                borderSide: BorderSide(color: Colors.grey.shade200),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12.0),
+                borderSide: const BorderSide(color: Colors.black, width: 1.5),
+              ),
+            ),
+          ),
         ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12.0),
-          borderSide: const BorderSide(color: Colors.black, width: 1.5),
+        const SizedBox(width: 6),
+        IconButton(
+          icon: const Icon(Icons.push_pin_outlined, color: Colors.black87, size: 26),
+          tooltip: "Selecionar destino no mapa",
+          onPressed: _isGettingLocation ? null : _selectOnMapDestination,
         ),
-      ),
+      ],
     );
   }
 
   Widget _buildSearchResultsList(
     List<Map<String, String>> results,
-    bool isOrigin,
   ) {
     if (results.isEmpty) return const SizedBox.shrink();
-
     return Material(
-      // Adiciona Material para elevação e cor de fundo
-      elevation: 3.0, // Sombra sutil
+      elevation: 3.0,
       borderRadius: BorderRadius.circular(8.0),
-      color: Colors.white, // Fundo da lista de resultados
+      color: Colors.white,
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxHeight:
-              MediaQuery.of(context).size.height * 0.25, // Limita a altura
+          maxHeight: MediaQuery.of(context).size.height * 0.25,
         ),
         child: ListView.builder(
+          key: const ValueKey("destList"),
           shrinkWrap: true,
           itemCount: results.length,
           itemBuilder: (context, index) {
             final placeData = results[index];
             return ListTile(
+              key: ValueKey(placeData['place_id'] ?? placeData['description']),
               title: Text(
                 placeData['description']!,
                 maxLines: 1,
@@ -458,7 +555,7 @@ class _AddressSearchBottomSheetState extends State<AddressSearchBottomSheet> {
                 color: Colors.grey,
               ),
               dense: true,
-              onTap: () => _selectPlace(placeData, isOrigin),
+              onTap: () => _selectPlace(placeData, false),
             );
           },
         ),
@@ -469,35 +566,24 @@ class _AddressSearchBottomSheetState extends State<AddressSearchBottomSheet> {
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
-    // Ajuste dinâmico da altura do BottomSheet (simplificado)
-    double estimatedContentHeight =
-        220; // Altura base (campos de texto, botão, etc.)
-    if (_originFocusNode.hasFocus && _originAutocompleteResults.isNotEmpty) {
-      estimatedContentHeight += (_originAutocompleteResults.length * 48.0)
-          .clamp(0, 120.0); // Altura da lista de origem
+    double estimatedContentHeight = 220;
+    if (_destinationFocusNode.hasFocus && _destinationAutocompleteResults.isNotEmpty) {
+      estimatedContentHeight += (_destinationAutocompleteResults.length * 48.0).clamp(0, 120.0);
     }
-    if (_destinationFocusNode.hasFocus &&
-        _destinationAutocompleteResults.isNotEmpty) {
-      estimatedContentHeight += (_destinationAutocompleteResults.length * 48.0)
-          .clamp(0, 120.0); // Altura da lista de destino
-    }
-
-    final initialSheetHeightFactor = (estimatedContentHeight / screenHeight)
-        .clamp(0.35, 0.90); // Clamp entre 35% e 90%
+    final initialSheetHeightFactor = (estimatedContentHeight / screenHeight).clamp(0.35, 0.90);
 
     return DraggableScrollableSheet(
       initialChildSize: initialSheetHeightFactor,
-      minChildSize: 0.3, // Mínimo de 30% da tela
-      maxChildSize: 0.9, // Máximo de 90% da tela
+      minChildSize: 0.3,
+      maxChildSize: 0.9,
       expand: false,
       builder: (BuildContext context, ScrollController scrollController) {
         return BackdropFilter(
-          // Efeito de desfoque no fundo
           filter: ImageFilter.blur(sigmaX: 2.5, sigmaY: 2.5),
           child: Container(
             padding: const EdgeInsets.only(top: 12.0),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.96), // Leve transparência
+              color: Colors.white.withOpacity(0.96),
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(24.0),
               ),
@@ -512,7 +598,6 @@ class _AddressSearchBottomSheetState extends State<AddressSearchBottomSheet> {
             child: Column(
               children: [
                 Container(
-                  // "Handle" para indicar que é arrastável
                   width: 50,
                   height: 6,
                   margin: const EdgeInsets.only(bottom: 12.0),
@@ -523,20 +608,12 @@ class _AddressSearchBottomSheetState extends State<AddressSearchBottomSheet> {
                 ),
                 Expanded(
                   child: ListView(
+                    key: const ValueKey("mainListView"),
                     controller: scrollController,
                     padding: const EdgeInsets.symmetric(horizontal: 16.0),
                     children: [
-                      _buildAddressTextFieldWidget(
-                        controller: _originController,
-                        focusNode: _originFocusNode,
-                        hintText: 'Ponto de Partida',
-                        leadingIcon: Icons.trip_origin_outlined,
-                        isOriginField: true,
-                        // onPinTap: () { Navigator.of(context).pop(); /* Lógica para marcar no mapa */ },
-                      ),
-                      // Loader ou Resultados para Origem
-                      if (_originFocusNode.hasFocus &&
-                          _isLoadingOriginSuggestions)
+                      _buildOriginFieldUI(),
+                      if (_isGettingLocation)
                         const Center(
                           child: Padding(
                             padding: EdgeInsets.all(16.0),
@@ -545,26 +622,10 @@ class _AddressSearchBottomSheetState extends State<AddressSearchBottomSheet> {
                               size: 30,
                             ),
                           ),
-                        )
-                      else if (_originFocusNode.hasFocus &&
-                          !_isLoadingOriginSuggestions)
-                        _buildSearchResultsList(
-                          _originAutocompleteResults,
-                          true,
                         ),
-
                       const SizedBox(height: 10),
-                      _buildAddressTextFieldWidget(
-                        controller: _destinationController,
-                        focusNode: _destinationFocusNode,
-                        hintText: 'Para onde vamos?',
-                        leadingIcon: Icons.location_on_outlined,
-                        isOriginField: false,
-                        // onPinTap: () { Navigator.of(context).pop(); /* Lógica para marcar no mapa */ },
-                      ),
-                      // Loader ou Resultados para Destino
-                      if (_destinationFocusNode.hasFocus &&
-                          _isLoadingDestinationSuggestions)
+                      _buildDestinationFieldUI(),
+                      if (_destinationFocusNode.hasFocus && _isLoadingDestinationSuggestions)
                         const Center(
                           child: Padding(
                             padding: EdgeInsets.all(16.0),
@@ -574,19 +635,14 @@ class _AddressSearchBottomSheetState extends State<AddressSearchBottomSheet> {
                             ),
                           ),
                         )
-                      else if (_destinationFocusNode.hasFocus &&
-                          !_isLoadingDestinationSuggestions)
+                      else if (_destinationFocusNode.hasFocus && !_isLoadingDestinationSuggestions)
                         _buildSearchResultsList(
                           _destinationAutocompleteResults,
-                          false,
                         ),
-
-                      const SizedBox(height: 24), // Espaço antes do botão
+                      const SizedBox(height: 24),
                     ],
                   ),
                 ),
-                // Botão Continuar
-                // Garante que o botão fique visível e no final do BottomSheet
                 Padding(
                   padding: const EdgeInsets.only(
                     left: 16.0,
@@ -595,25 +651,20 @@ class _AddressSearchBottomSheetState extends State<AddressSearchBottomSheet> {
                     top: 8.0,
                   ),
                   child: ElevatedButton(
-                    onPressed:
-                        _canProceed
-                            ? _proceedToDeliveryOptions
-                            : null, // Habilita/desabilita
+                    onPressed: _canProceed ? _proceedToDeliveryOptions : null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor:
                           _canProceed ? Colors.black : Colors.grey.shade400,
                       foregroundColor: Colors.white,
                       minimumSize: const Size(double.infinity, 50),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(
-                          12.0,
-                        ), // Borda mais suave
+                        borderRadius: BorderRadius.circular(12.0),
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ).copyWith(
                       elevation: MaterialStateProperty.all(
                         _canProceed ? 2.0 : 0.0,
-                      ), // Elevação condicional
+                      ),
                     ),
                     child: const Text(
                       'Continuar',

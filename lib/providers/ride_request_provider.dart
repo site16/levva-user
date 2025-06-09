@@ -4,36 +4,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:levva/services/google_maps_service.dart';
 
-import '../models/enums.dart'; // Seus enums DeliveryType, VehicleType, PaymentType
-import '../models/ride_detail_model.dart'; // Seu modelo RideDetailModel
+import '../models/enums.dart';
+import '../models/ride_detail_model.dart';
 import '../services/firestore_service.dart';
-
-// Enum com todos os status detalhados da corrida (conforme o seu último envio)
-enum RideRequestStatus {
-  none,
-  originSelected,
-  destinationSelected,
-  calculatingRoute,
-  routeCalculated,
-  selectingOptions,
-
-  searchingDriver,
-  driverFound,
-  driverAssigned,
-
-  rideAccepted,
-  driverEnRouteToPickup,
-  driverArrivedAtPickup,
-  rideInProgressToDestination,
-
-  rideCompleted,
-  rideCancelledByUser,
-  rideCancelledByDriver,
-  rideFailed,
-
-  error,
-  notFound, unknown, // movido para o final com error, conforme seu último código
-}
 
 // Classe para detalhes do local (origem/destino)
 class PlaceDetail {
@@ -54,6 +27,18 @@ class RideRequestProvider with ChangeNotifier {
   final GoogleMapsService _googleMapsService;
   final FirestoreService _firestoreService;
 
+  // --- LÓGICA DE TIPO DE SERVIÇO ---
+  ServiceType _serviceType = ServiceType.passenger;
+  ServiceType get serviceType => _serviceType;
+  void setServiceType(ServiceType type) {
+    if (_serviceType != type) {
+      _serviceType = type;
+      notifyListeners();
+      print("RideRequestProvider: ServiceType alterado para $_serviceType");
+    }
+  }
+
+  // --- CAMPOS DE STATUS, DADOS E FLUXO ---
   RideRequestStatus _status = RideRequestStatus.none;
   PlaceDetail? _origin;
   PlaceDetail? _destination;
@@ -69,7 +54,13 @@ class RideRequestProvider with ChangeNotifier {
   VehicleType? _selectedVehicleType;
   PaymentType? _selectedPaymentType;
   double _calculatedPrice = 0.0;
-  String? _paymentChangeFor; // Para troco, se pagamento em dinheiro
+  String? _paymentChangeFor;
+
+  // Novos campos para entrega de produto
+  String? _receiverName;
+  String? _receiverCell;
+  String? _itemType;
+  String? _itemObservation;
 
   // Detalhes do Entregador
   String? _assignedDriverId;
@@ -80,8 +71,7 @@ class RideRequestProvider with ChangeNotifier {
   String? _assignedDriverEtaToPickup;
   String? _assignedDriverEtaToDestination;
 
-  String? _currentRideId; // ID da corrida ativa
-
+  String? _currentRideId;
   String? _errorMessage;
   bool _isLoading = false;
 
@@ -113,7 +103,12 @@ class RideRequestProvider with ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool get isLoading => _isLoading;
 
-  // Construtor aceitando ambos os serviços
+  // Getters para dados de entrega de produto
+  String? get receiverName => _receiverName;
+  String? get receiverCell => _receiverCell;
+  String? get itemType => _itemType;
+  String? get itemObservation => _itemObservation;
+
   RideRequestProvider(this._googleMapsService, this._firestoreService);
 
   void _setLoading(bool loading, {bool notify = true}) {
@@ -124,11 +119,8 @@ class RideRequestProvider with ChangeNotifier {
 
   void _setError(String message, {bool notify = true}) {
     _errorMessage = message;
-    _updateStatus(
-      RideRequestStatus.error,
-      notify: false,
-    ); // Atualiza status para erro
-    _isLoading = false; // Garante que loading é falso em caso de erro
+    _updateStatus(RideRequestStatus.error, notify: false);
+    _isLoading = false;
     if (notify) notifyListeners();
     print("RideRequestProvider Error: $message");
   }
@@ -164,7 +156,13 @@ class RideRequestProvider with ChangeNotifier {
     _currentRideId = null;
     _errorMessage = null;
     _isLoading = false;
-    _updateStatus(RideRequestStatus.none); // Notifica ouvintes
+    _serviceType = ServiceType.passenger;
+    // Limpa também campos de entrega de produto
+    _receiverName = null;
+    _receiverCell = null;
+    _itemType = null;
+    _itemObservation = null;
+    _updateStatus(RideRequestStatus.none);
     print("RideRequestProvider: Detalhes da corrida e estado reiniciados.");
   }
 
@@ -190,7 +188,7 @@ class RideRequestProvider with ChangeNotifier {
           : RideRequestStatus.destinationSelected,
       notify: false,
     );
-    notifyListeners(); // Notifica após atualizar o origin e o status
+    notifyListeners();
     if (_destination != null) await calculateRoute();
   }
 
@@ -219,14 +217,8 @@ class RideRequestProvider with ChangeNotifier {
       address: address,
       placeId: placeId,
     );
-    // Atualiza o status baseado se a origem já foi selecionada
-    _updateStatus(
-      _origin == null
-          ? RideRequestStatus.destinationSelected
-          : RideRequestStatus.destinationSelected,
-      notify: false,
-    );
-    notifyListeners(); // Notifica após atualizar o destino e o status
+    _updateStatus(RideRequestStatus.destinationSelected, notify: false);
+    notifyListeners();
     if (_origin != null) await calculateRoute();
   }
 
@@ -254,10 +246,8 @@ class RideRequestProvider with ChangeNotifier {
         sessionToken: sessionToken,
       );
     } catch (e) {
-      print(
-        "RideRequestProvider: Erro ao buscar sugestões de autocompletar: $e",
-      );
-      throw e; // Re-lança para que a UI possa tratar
+      print("RideRequestProvider: Erro ao buscar sugestões de autocompletar: $e");
+      throw e;
     }
   }
 
@@ -282,10 +272,8 @@ class RideRequestProvider with ChangeNotifier {
       }
       return null;
     } catch (e) {
-      print(
-        "RideRequestProvider: Erro ao obter detalhes do local pelo Place ID: $e",
-      );
-      throw e; // Re-lança para que a UI possa tratar
+      print("RideRequestProvider: Erro ao obter detalhes do local pelo Place ID: $e");
+      throw e;
     }
   }
 
@@ -294,12 +282,9 @@ class RideRequestProvider with ChangeNotifier {
       _setError("Origem e Destino devem ser definidos para calcular a rota.");
       return;
     }
-    _setLoading(
-      true,
-      notify: false,
-    ); // Evita notificação duplicada se _updateStatus notificar
+    _setLoading(true, notify: false);
     _updateStatus(RideRequestStatus.calculatingRoute);
-    _errorMessage = null; // Limpa erro anterior
+    _errorMessage = null;
     try {
       final directionsData = await _googleMapsService.getDirections(
         _origin!.location,
@@ -315,14 +300,14 @@ class RideRequestProvider with ChangeNotifier {
         _routeBounds = directionsData['bounds'] as LatLngBounds?;
         _updateStatus(RideRequestStatus.routeCalculated);
       } else {
-        _polylineCoordinates = []; // Garante que não há polilinhas antigas
+        _polylineCoordinates = [];
         _setError("Não foi possível calcular a rota. Verifique os endereços.");
       }
     } catch (e) {
       _polylineCoordinates = [];
       _setError("Erro ao calcular rota: ${e.toString()}");
     } finally {
-      _setLoading(false); // Notifica ao final, independentemente do resultado
+      _setLoading(false);
     }
   }
 
@@ -331,17 +316,28 @@ class RideRequestProvider with ChangeNotifier {
     required VehicleType vehicleType,
     required PaymentType paymentType,
     required double calculatedPrice,
-    String? changeFor, // Troco para qual valor, se pagamento em dinheiro
+    String? changeFor,
+    // Novos parâmetros opcionais para entrega de produto:
+    String? receiverName,
+    String? receiverCell,
+    String? itemType,
+    String? itemObservation,
   }) {
     _selectedDeliveryType = deliveryType;
     _selectedVehicleType = vehicleType;
     _selectedPaymentType = paymentType;
     _calculatedPrice = calculatedPrice;
-    _paymentChangeFor = changeFor; // Armazena a informação de troco
+    _paymentChangeFor = changeFor;
+    // Salva os dados da entrega de produto, se vierem
+    _receiverName = receiverName;
+    _receiverCell = receiverCell;
+    _itemType = itemType;
+    _itemObservation = itemObservation;
     _updateStatus(RideRequestStatus.selectingOptions);
     print(
       "RideRequestProvider: Opções de entrega definidas. Preço: R\$$_calculatedPrice. Troco para: $_paymentChangeFor",
     );
+    notifyListeners();
   }
 
   void updateCalculatedPrice(double price) {
@@ -366,43 +362,39 @@ class RideRequestProvider with ChangeNotifier {
     _updateStatus(RideRequestStatus.searchingDriver);
     _errorMessage = null;
 
-    // Simulação de criação de ID de corrida
     _currentRideId = "levva_ride_${DateTime.now().millisecondsSinceEpoch}";
     print(
       "RideRequestProvider: Iniciando busca por entregador para a corrida ID: $_currentRideId",
     );
 
-    // Simulação de busca por entregador
-    await Future.delayed(const Duration(seconds: 3)); // Simula tempo de busca
+    await Future.delayed(const Duration(seconds: 3));
 
-    // Simulação de dados do entregador encontrado
-    _assignedDriverId = "driver_id_${DateTime.now().second}"; // ID Fictício
-    _assignedDriverName = "Ana Transportes"; // Nome Fictício
-    _assignedDriverVehicleDetails =
-        "Moto Yamaha Factor - Placa LEV-0A00"; // Detalhes Fictícios
-    _assignedDriverProfileImageUrl =
-        "https://placehold.co/100x100/D1C4E9/4527A0&text=Ana"; // URL Fictícia
+    _assignedDriverId = "driver_id_${DateTime.now().second}";
+    _assignedDriverName = _serviceType == ServiceType.passenger
+        ? "Motorista Levva"
+        : "Ana Transportes";
+    _assignedDriverVehicleDetails = _serviceType == ServiceType.passenger
+        ? "Carro Sedan - Placa LEV-0A99"
+        : "Moto Yamaha Factor - Placa LEV-0A00";
+    _assignedDriverProfileImageUrl = _serviceType == ServiceType.passenger
+        ? "https://placehold.co/100x100/4FC3F7/01579B?text=Passageiro"
+        : "https://placehold.co/100x100/D1C4E9/4527A0&text=Ana";
     if (_origin != null) {
-      // Simula posição inicial do entregador perto da origem
       _assignedDriverLocation = LatLng(
         _origin!.location.latitude + 0.004,
         _origin!.location.longitude - 0.003,
       );
     }
-    _updateStatus(
-      RideRequestStatus.driverAssigned,
-    ); // Novo status indicando que um motorista foi designado
-    _setLoading(false); // Para de carregar após "encontrar" o motorista
+    _updateStatus(RideRequestStatus.driverAssigned);
+    _setLoading(false);
 
     print(
-      "RideRequestProvider: Entregador ${_assignedDriverName} designado para a corrida $_currentRideId.",
+      "RideRequestProvider: Entregador/Motorista ${_assignedDriverName} designado para a corrida $_currentRideId.",
     );
-    // Procede para a confirmação e aceitação da corrida
     confirmRideAcceptance();
   }
 
   void confirmRideAcceptance() {
-    // Permite confirmação se motorista foi encontrado ou já designado
     if (_status != RideRequestStatus.driverFound &&
         _status != RideRequestStatus.driverAssigned) {
       print(
@@ -412,31 +404,25 @@ class RideRequestProvider with ChangeNotifier {
     }
     _updateStatus(RideRequestStatus.rideAccepted);
     print(
-      "RideRequestProvider: Corrida $_currentRideId aceita/confirmada. Entregador será notificado (simulação).",
+      "RideRequestProvider: Corrida $_currentRideId aceita/confirmada. Entregador/Motorista será notificado (simulação).",
     );
 
-    // Inicia simulação do entregador indo para o local de coleta
     _simulateDriverToPickup();
   }
 
-  // Simulação do entregador indo para o local de coleta
   Future<void> _simulateDriverToPickup() async {
     _updateStatus(RideRequestStatus.driverEnRouteToPickup);
     _assignedDriverEtaToPickup = "4 min";
-    notifyListeners(); // Notifica para UI atualizar ETA e localização do motorista
+    notifyListeners();
 
     print(
-      "RideRequestProvider: Entregador a caminho da coleta. ETA: $_assignedDriverEtaToPickup",
+      "RideRequestProvider: Entregador/Motorista a caminho da coleta. ETA: $_assignedDriverEtaToPickup",
     );
     for (int i = 0; i < 4; i++) {
-      // Simula 4 passos de atualização
       if (_status != RideRequestStatus.driverEnRouteToPickup)
-        return; // Permite cancelamento
-      await Future.delayed(
-        const Duration(seconds: 3),
-      ); // Intervalo entre atualizações
+        return;
+      await Future.delayed(const Duration(seconds: 3));
       if (_origin != null && _assignedDriverLocation != null) {
-        // Simula movimento do entregador em direção à origem
         _assignedDriverLocation = LatLng(
           _assignedDriverLocation!.latitude -
               (_assignedDriverLocation!.latitude - _origin!.location.latitude) *
@@ -453,29 +439,26 @@ class RideRequestProvider with ChangeNotifier {
     }
 
     if (_status != RideRequestStatus.driverEnRouteToPickup)
-      return; // Verifica novamente antes de mudar status
+      return;
 
     _updateStatus(RideRequestStatus.driverArrivedAtPickup);
     _assignedDriverEtaToPickup = "Chegou!";
     if (_origin != null)
-      _assignedDriverLocation =
-          _origin!.location; // Coloca o motorista exatamente na origem
+      _assignedDriverLocation = _origin!.location;
     notifyListeners();
-    print("RideRequestProvider: Entregador chegou no local de coleta.");
+    print("RideRequestProvider: Entregador/Motorista chegou no local de coleta.");
 
-    await Future.delayed(const Duration(seconds: 4)); // Simula tempo de coleta
+    await Future.delayed(const Duration(seconds: 4));
     if (_status != RideRequestStatus.driverArrivedAtPickup)
-      return; // Permite cancelamento
+      return;
 
-    // Inicia simulação da corrida para o destino
     _simulateRideToDestination();
   }
 
-  // Simulação da corrida para o destino
   Future<void> _simulateRideToDestination() async {
     _updateStatus(RideRequestStatus.rideInProgressToDestination);
-    _assignedDriverEtaToDestination = "8 min"; // ETA para o destino
-    _assignedDriverEtaToPickup = null; // Limpa ETA da coleta
+    _assignedDriverEtaToDestination = "8 min";
+    _assignedDriverEtaToPickup = null;
     notifyListeners();
     print(
       "RideRequestProvider: Em rota para o destino. ETA: $_assignedDriverEtaToDestination",
@@ -488,53 +471,46 @@ class RideRequestProvider with ChangeNotifier {
       double endLng = _destination!.location.longitude;
 
       for (int i = 1; i <= 4; i++) {
-        // Simula 4 passos
         if (_status != RideRequestStatus.rideInProgressToDestination) return;
-        await Future.delayed(const Duration(seconds: 4)); // Intervalo
+        await Future.delayed(const Duration(seconds: 4));
         _assignedDriverLocation = LatLng(
-          startLat +
-              (endLat - startLat) * (i / 4.0), // Interpolação linear simples
+          startLat + (endLat - startLat) * (i / 4.0),
           startLng + (endLng - startLng) * (i / 4.0),
         );
         _assignedDriverEtaToDestination = "${8 - i * 2} min";
         if (i == 4) _assignedDriverEtaToDestination = "Chegando...";
         notifyListeners();
         print(
-          "RideRequestProvider: Posição do entregador atualizada: ${_assignedDriverLocation}. ETA Destino: ${_assignedDriverEtaToDestination}",
+          "RideRequestProvider: Posição do entregador/motorista atualizada: ${_assignedDriverLocation}. ETA Destino: ${_assignedDriverEtaToDestination}",
         );
       }
     } else {
-      await Future.delayed(
-        const Duration(seconds: 16),
-      ); // Duração total se não houver locais
+      await Future.delayed(const Duration(seconds: 16));
     }
 
     if (_status != RideRequestStatus.rideInProgressToDestination) return;
 
-    completeRide(); // Completa a corrida
+    completeRide();
   }
 
   Future<void> completeRide() async {
     _updateStatus(RideRequestStatus.rideCompleted);
-    _assignedDriverEtaToDestination = "Entrega Concluída!";
+    _assignedDriverEtaToDestination = "Entrega/Viagem Concluída!";
     if (_destination != null)
-      _assignedDriverLocation = _destination!.location; // Coloca no destino
+      _assignedDriverLocation = _destination!.location;
     notifyListeners();
     print("RideRequestProvider: Corrida ID $_currentRideId completada!");
 
     await _saveCurrentRideToHistory(RideHistoryStatus.completed);
 
-    // Reseta o estado após um tempo para o usuário ver a conclusão
     Future.delayed(const Duration(seconds: 4), () {
       if (_status == RideRequestStatus.rideCompleted) {
-        // Garante que o estado não mudou
         clearRideDetailsAndReset();
       }
     });
   }
 
   Future<void> cancelRideByUser() async {
-    // Verifica se a corrida pode ser cancelada (não pode se já completada, falhou, etc.)
     if (_status.index >= RideRequestStatus.rideCompleted.index &&
         _status.index <= RideRequestStatus.rideFailed.index) {
       print(
@@ -543,20 +519,17 @@ class RideRequestProvider with ChangeNotifier {
       return;
     }
 
-    RideRequestStatus previousStatus =
-        _status; // Guarda o status anterior para lógica de save
+    RideRequestStatus previousStatus = _status;
     _updateStatus(RideRequestStatus.rideCancelledByUser);
     print(
       "RideRequestProvider: Corrida $_currentRideId cancelada pelo usuário.",
     );
 
-    // Salva no histórico se a corrida já tinha um ID (ou seja, busca por motorista iniciada)
     if (_currentRideId != null &&
         previousStatus.index >= RideRequestStatus.searchingDriver.index) {
       await _saveCurrentRideToHistory(RideHistoryStatus.cancelled);
     }
 
-    // Limpa todos os detalhes e reseta o estado
     clearRideDetailsAndReset();
   }
 
@@ -583,16 +556,14 @@ class RideRequestProvider with ChangeNotifier {
       destinationName: _destination!.name,
       originLocation: _origin!.location,
       destinationLocation: _destination!.location,
-      rideDate: Timestamp.now(), // Data/hora atual da conclusão/cancelamento
+      rideDate: Timestamp.now(),
       price: _calculatedPrice,
-      status: historyStatus, // Status final para o histórico
+      status: historyStatus,
       driverName: _assignedDriverName,
       vehicleDetails: _assignedDriverVehicleDetails,
-      // Adicione outros campos relevantes se necessário (ex: confirmationCode)
     );
 
     try {
-      // IMPORTANTE: Este método precisa existir no seu FirestoreService!
       await _firestoreService.saveRideToHistory(currentUser.uid, rideDetail);
       print(
         "RideRequestProvider: Corrida ID ${_currentRideId} 'salva' no histórico do usuário ${currentUser.uid} com status $historyStatus.",
@@ -601,34 +572,27 @@ class RideRequestProvider with ChangeNotifier {
       print(
         "RideRequestProvider: Erro ao tentar salvar corrida ID ${_currentRideId} no histórico: $e",
       );
-      // Considere notificar o usuário ou tentar novamente, dependendo da política do app
     }
   }
 
-  // Método para o usuário cancelar a busca por motorista
   void cancelSearchForDriver() {
     if (_status == RideRequestStatus.searchingDriver ||
         _status == RideRequestStatus.driverFound ||
         _status == RideRequestStatus.driverAssigned) {
       _setLoading(false);
-      _updateStatus(
-        RideRequestStatus.selectingOptions,
-      ); // Volta para a tela de seleção de opções
+      _updateStatus(RideRequestStatus.selectingOptions);
       _errorMessage = null;
-      _currentRideId = null; // Limpa o ID da corrida que estava sendo buscada
-      // Limpa detalhes do motorista se algum já tivesse sido pré-assignado (no caso de driverFound/driverAssigned)
+      _currentRideId = null;
       _assignedDriverId = null;
       _assignedDriverName = null;
       _assignedDriverVehicleDetails = null;
       _assignedDriverProfileImageUrl = null;
       _assignedDriverLocation = null;
-      print(
-        "RideRequestProvider: Busca por entregador cancelada pelo usuário.",
-      );
+      print("RideRequestProvider: Busca por entregador/motorista cancelada pelo usuário.");
     }
   }
 
-  // Os métodos searchForDriver() {} e cancelSearch() {} foram removidos pois suas lógicas
-  // parecem estar implementadas em requestRideAndFindDriver() e cancelSearchForDriver() / cancelRideByUser() respectivamente.
-  // Se eles tinham um propósito diferente, você pode adicioná-los novamente.
+  void setDestinationAddress(String address) {}
+
+  void setPassengerOptions({required String passengerName, required String passengerCpf, required String passengerPhone, required PaymentType paymentType, required bool isForMe}) {}
 }

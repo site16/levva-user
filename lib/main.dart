@@ -1,4 +1,3 @@
-// lib/main.dart
 import 'package:cloud_firestore/cloud_firestore.dart' show FirebaseFirestore;
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
@@ -6,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/date_symbol_data_local.dart';
+
 import 'package:levva/screens/home/levva_eats/cart_screen.dart';
 import 'package:levva/screens/home/levva_eats/checkout_screen.dart';
 import 'package:levva/screens/home/levva_eats/eats_landing_screen.dart';
@@ -15,8 +15,7 @@ import 'package:levva/screens/home/levva_eats/store_list_screen.dart';
 import 'package:levva/screens/home/levva_eats/favorite_stores_screen.dart';
 
 import 'package:levva/providers/eats_orders_provider.dart';
-import 'package:levva/screens/orders/orders_screen.dart'; // Presumindo que EatsOrdersScreen e routeName estão aqui ou é global
-
+import 'package:levva/screens/orders/orders_screen.dart';
 
 import 'package:levva/services/google_maps_service.dart';
 import 'package:levva/widgets/pulsing_logo_loader.dart';
@@ -34,6 +33,7 @@ import 'providers/levva_pay_provider.dart';
 import 'providers/notification_provider.dart';
 import 'providers/ride_history_provider.dart';
 import 'providers/ride_request_provider.dart';
+import 'providers/deliveryman_provider.dart';
 
 // Telas
 import 'screens/auth/login_screen.dart';
@@ -47,8 +47,6 @@ import 'screens/levva_pay/levva_pay_screen.dart';
 import 'screens/notifications/notifications_screen.dart';
 import 'screens/profile/profile_screen.dart';
 import 'screens/referral/referral_screen.dart';
-// Remova o import da antiga RideDetailScreen se houver um específico para ela aqui
-// import 'screens/ride_detail/ride_detail_screen.dart'; // Exemplo de como poderia estar
 import 'screens/ride_history/ride_history_screen.dart';
 import 'screens/sos/sos_screen.dart';
 import 'screens/support/support_screen.dart';
@@ -58,6 +56,9 @@ import 'services/auth_service.dart';
 import 'services/discount_service.dart';
 import 'services/firestore_service.dart';
 import 'services/notification_service.dart';
+
+// MarkerAssets para pré-carregamento do ícone customizado
+import 'utils/marker_assets.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -73,6 +74,10 @@ void main() async {
   }
 
   await initializeDateFormatting('pt_BR', null);
+
+  // Pré-carregue o ícone customizado ANTES do app rodar
+  await MarkerAssets.preloadIcons();
+
   runApp(const LevvaApp());
 }
 
@@ -102,91 +107,62 @@ class LevvaApp extends StatelessWidget {
 
         // Providers de Estado
         ChangeNotifierProxyProvider<AuthService, AuthProvider>(
-          create:
-              (context) => AuthProvider(
-                context.read<AuthService>(),
-                context.read<FirestoreService>(),
-              ),
-          update:
-              (context, authService, previousAuthProvider) =>
-                  previousAuthProvider ??
-                  AuthProvider(authService, context.read<FirestoreService>()),
+          create: (context) => AuthProvider(
+            context.read<AuthService>(),
+            context.read<FirestoreService>(),
+          ),
+          update: (context, authService, previousAuthProvider) =>
+              previousAuthProvider ??
+              AuthProvider(authService, context.read<FirestoreService>()),
         ),
-        ChangeNotifierProxyProvider2<
-            GoogleMapsService,
-            FirestoreService,
+        ChangeNotifierProxyProvider2<GoogleMapsService, FirestoreService,
             RideRequestProvider>(
-          create:
-              (context) => RideRequestProvider(
-                context.read<GoogleMapsService>(),
-                context.read<FirestoreService>(),
-              ),
-          update:
-              (
-                context,
-                googleMapsService,
-                firestoreService,
-                previousRideRequestProvider,
-              ) =>
-                  previousRideRequestProvider ??
-                  RideRequestProvider(googleMapsService, firestoreService),
+          create: (context) => RideRequestProvider(
+            context.read<GoogleMapsService>(),
+            context.read<FirestoreService>(),
+          ),
+          update: (context, googleMapsService, firestoreService,
+                  previousRideRequestProvider) =>
+              previousRideRequestProvider ??
+              RideRequestProvider(googleMapsService, firestoreService),
         ),
         ChangeNotifierProxyProvider<NotificationService, NotificationProvider>(
-          create:
-              (context) =>
-                  NotificationProvider(context.read<NotificationService>()),
-          update:
-              (context, notificationService, previousNotificationProvider) =>
-                  previousNotificationProvider ??
-                  NotificationProvider(notificationService),
+          create: (context) =>
+              NotificationProvider(context.read<NotificationService>()),
+          update: (context, notificationService, previousNotificationProvider) =>
+              previousNotificationProvider ??
+              NotificationProvider(notificationService),
         ),
-        
-        ChangeNotifierProxyProvider2<
-            FirestoreService,
-            AuthService,
+        ChangeNotifierProxyProvider2<FirestoreService, AuthService,
             RideHistoryProvider>(
-          create:
-              (context) => RideHistoryProvider(
-                context.read<FirestoreService>(),
-                context.read<AuthService>(),
-              ),
-          update:
-              (
-                context,
-                firestoreService,
-                authService,
-                previousRideHistoryProvider,
-              ) =>
-                  previousRideHistoryProvider ??
-                  RideHistoryProvider(firestoreService, authService),
+          create: (context) => RideHistoryProvider(
+            context.read<FirestoreService>(),
+            context.read<AuthService>(),
+          ),
+          update: (context, firestoreService, authService,
+                  previousRideHistoryProvider) =>
+              previousRideHistoryProvider ??
+              RideHistoryProvider(firestoreService, authService),
         ),
         ChangeNotifierProvider(create: (_) => LevvaPayProvider()),
-        ChangeNotifierProxyProvider2<
-            AuthProvider,
-            DiscountService,
+        ChangeNotifierProxyProvider2<AuthProvider, DiscountService,
             DiscountProvider>(
-          create:
-              (context) => DiscountProvider(
-                context.read<DiscountService>(),
-                context.read<AuthProvider>(),
-              ),
-          update:
-              (
-                context,
-                authProvider,
-                discountService,
-                previousDiscountProvider,
-              ) =>
-                  previousDiscountProvider ??
-                  DiscountProvider(discountService, authProvider),
+          create: (context) => DiscountProvider(
+            context.read<DiscountService>(),
+            context.read<AuthProvider>(),
+          ),
+          update: (context, authProvider, discountService,
+                  previousDiscountProvider) =>
+              previousDiscountProvider ??
+              DiscountProvider(discountService, authProvider),
         ),
         ChangeNotifierProvider(create: (_) => DriverRegistrationProvider()),
         ChangeNotifierProxyProvider<AuthService, EatsOrdersProvider>(
           create: (context) => EatsOrdersProvider(context.read<AuthService>()),
-          update:
-              (context, authService, previousEatsOrdersProvider) =>
-                  previousEatsOrdersProvider ?? EatsOrdersProvider(authService),
+          update: (context, authService, previousEatsOrdersProvider) =>
+              previousEatsOrdersProvider ?? EatsOrdersProvider(authService),
         ),
+        ChangeNotifierProvider(create: (_) => DeliverymanProvider()),
       ],
       child: MaterialApp(
         title: 'Levva',
@@ -244,10 +220,9 @@ class LevvaApp extends StatelessWidget {
           iconTheme: const IconThemeData(color: appPrimaryColor),
           inputDecorationTheme: InputDecorationTheme(
             prefixIconColor: MaterialStateColor.resolveWith(
-              (states) =>
-                  states.contains(MaterialState.focused)
-                      ? appPrimaryColor
-                      : Colors.grey.shade600,
+              (states) => states.contains(MaterialState.focused)
+                  ? appPrimaryColor
+                  : Colors.grey.shade600,
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10.0),
@@ -357,40 +332,20 @@ class LevvaApp extends StatelessWidget {
             "Navegando para: ${settings.name} com argumentos: ${settings.arguments}",
           );
 
-          // --- BLOCO REMOVIDO/COMENTADO ---
-          // if (settings.name == RideDetailScreen.routeName) {
-          //   final rideId = settings.arguments as String?;
-          //   if (rideId != null) {
-          //     return MaterialPageRoute(
-          //       builder: (ctx) => RideDetailScreen(rideId: rideId),
-          //     );
-          //   }
-          //   return MaterialPageRoute(
-          //     builder:
-          //         (_) => const Scaffold(
-          //           body: Center(child: Text('ID da corrida não fornecido!')),
-          //         ),
-          //   );
-          // }
-          // --- FIM DO BLOCO REMOVIDO/COMENTADO ---
-
-
           if (settings.name == DriverRegistrationFormScreen.routeName) {
             final vehicleType = settings.arguments as VehicleType?;
             if (vehicleType != null) {
               return MaterialPageRoute(
-                builder:
-                    (_) =>
-                        DriverRegistrationFormScreen(vehicleType: vehicleType),
+                builder: (_) =>
+                    DriverRegistrationFormScreen(vehicleType: vehicleType),
               );
             }
             return MaterialPageRoute(
-              builder:
-                  (_) => const Scaffold(
-                    body: Center(
-                      child: Text("Tipo de veículo não especificado."),
-                    ),
-                  ),
+              builder: (_) => const Scaffold(
+                body: Center(
+                  child: Text("Tipo de veículo não especificado."),
+                ),
+              ),
             );
           }
 
@@ -402,10 +357,9 @@ class LevvaApp extends StatelessWidget {
               );
             }
             return MaterialPageRoute(
-              builder:
-                  (_) => const Scaffold(
-                    body: Center(child: Text("Dados da loja não fornecidos.")),
-                  ),
+              builder: (_) => const Scaffold(
+                body: Center(child: Text("Dados da loja não fornecidos.")),
+              ),
             );
           }
 
@@ -424,12 +378,11 @@ class LevvaApp extends StatelessWidget {
               );
             }
             return MaterialPageRoute(
-              builder:
-                  (_) => const Scaffold(
-                    body: Center(
-                      child: Text("Valor total não fornecido para checkout."),
-                    ),
-                  ),
+              builder: (_) => const Scaffold(
+                body: Center(
+                  child: Text("Valor total não fornecido para checkout."),
+                ),
+              ),
             );
           }
 
@@ -437,17 +390,13 @@ class LevvaApp extends StatelessWidget {
             final orderDetails = settings.arguments as Map<String, dynamic>?;
             if (orderDetails != null) {
               return MaterialPageRoute(
-                builder:
-                    (_) => OrderConfirmationScreen(orderDetails: orderDetails),
+                builder: (_) => OrderConfirmationScreen(orderDetails: orderDetails),
               );
             }
             return MaterialPageRoute(
-              builder:
-                  (_) => const Scaffold(
-                    body: Center(
-                      child: Text("Detalhes do pedido não fornecidos."),
-                    ),
-                  ),
+              builder: (_) => const Scaffold(
+                body: Center(child: Text("Detalhes do pedido não fornecidos.")),
+              ),
             );
           }
 
@@ -505,10 +454,9 @@ class LevvaApp extends StatelessWidget {
 
             default:
               return MaterialPageRoute(
-                builder:
-                    (_) => const Scaffold(
-                      body: Center(child: Text('Página não encontrada')),
-                    ),
+                builder: (_) => const Scaffold(
+                  body: Center(child: Text('Página não encontrada')),
+                ),
               );
           }
         },
@@ -523,7 +471,6 @@ class AuthWrapper extends StatelessWidget {
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
 
-    // Corrigindo o print para que funcione corretamente
     print("AuthWrapper build: isLoading=${authProvider.isLoading}, authStatus=${authProvider.authStatus}, isUserFetched=${authProvider.isUserFetched}");
 
     const Widget loadingScreen = Scaffold(
@@ -541,9 +488,7 @@ class AuthWrapper extends StatelessWidget {
         (authProvider.authStatus == AuthStatus.uninitialized ||
             authProvider.authStatus == AuthStatus.authenticating ||
             !authProvider.isUserFetched)) {
-      print(
-        "AuthWrapper: Mostrando loadingScreen (condição principal)",
-      ); 
+      print("AuthWrapper: Mostrando loadingScreen (condição principal)");
       return loadingScreen;
     }
 
@@ -552,8 +497,8 @@ class AuthWrapper extends StatelessWidget {
         authProvider.isUserFetched) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (context.mounted) {
-         Provider.of<NotificationProvider>(context, listen: false).fetchNotifications();
-         Provider.of<DiscountProvider>(context, listen: false).fetchDiscounts();
+          Provider.of<NotificationProvider>(context, listen: false).fetchNotifications();
+          Provider.of<DiscountProvider>(context, listen: false).fetchDiscounts();
         }
       });
       return const HomeScreen();
@@ -562,14 +507,10 @@ class AuthWrapper extends StatelessWidget {
       return const LoginScreen();
     } else if (authProvider.authStatus == AuthStatus.error &&
         authProvider.isUserFetched) {
-      print(
-        "AuthWrapper: Erro de autenticação detectado - ${authProvider.errorMessage}",
-      );
+      print("AuthWrapper: Erro de autenticação detectado - ${authProvider.errorMessage}");
       return const LoginScreen();
     } else {
-      print(
-        "AuthWrapper: Mostrando loadingScreen (fallback) - Status: ${authProvider.authStatus}, UserFetched: ${authProvider.isUserFetched}",
-      );
+      print("AuthWrapper: Mostrando loadingScreen (fallback) - Status: ${authProvider.authStatus}, UserFetched: ${authProvider.isUserFetched}");
       return loadingScreen;
     }
   }

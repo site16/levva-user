@@ -1,13 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart'; // Para ouvir o RideRequestProvider
-import '../providers/ride_request_provider.dart'; // Importa o RideRequestProvider
-import 'global_pulsing_logo_loader.dart'; // Importa o loader
+import 'package:levva/models/enums.dart';
+import 'package:provider/provider.dart';
+import '../providers/ride_request_provider.dart';
+import 'global_pulsing_logo_loader.dart';
 
 class SearchingDriverDialog extends StatefulWidget {
   final String logoPath;
-  // Os callbacks onCancelDialog e onRetrySearch são chamados quando os botões são pressionados.
-  // A lógica principal de mudança de estado da busca é feita através do RideRequestProvider.
   final VoidCallback onCancelDialog;
   final VoidCallback onRetrySearch;
 
@@ -25,16 +24,13 @@ class SearchingDriverDialog extends StatefulWidget {
 class _SearchingDriverDialogState extends State<SearchingDriverDialog>
     with TickerProviderStateMixin {
   Timer? _timer;
-  int _countdown = 90; // Duração do temporizador em segundos
-  bool _canRetryButtonBeActive =
-      false; // Controla se o botão "De Novo" está ativo
+  int _countdown = 90;
+  bool _canRetryButtonBeActive = false;
 
-  // Controladores de Animação para o efeito "Entregador Encontrado"
   late AnimationController _foundAnimationController;
   late Animation<double> _scaleAnimation;
   late Animation<double> _fadeAnimation;
 
-  // Listener para o provider
   VoidCallback? _providerListener;
 
   @override
@@ -54,18 +50,14 @@ class _SearchingDriverDialogState extends State<SearchingDriverDialog>
       CurvedAnimation(parent: _foundAnimationController, curve: Curves.easeIn),
     );
 
-    // Acede ao provider e configura o listener e o estado inicial
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final rideProvider = Provider.of<RideRequestProvider>(
         context,
         listen: false,
       );
-      _handleProviderStatusChange(
-        rideProvider.status,
-      ); // Lida com o estado inicial
+      _handleProviderStatusChange(rideProvider.status);
 
-      // Adiciona um listener para futuras mudanças de estado do provider
       _providerListener = () {
         if (!mounted) return;
         _handleProviderStatusChange(rideProvider.status);
@@ -74,59 +66,45 @@ class _SearchingDriverDialogState extends State<SearchingDriverDialog>
     });
   }
 
-  // Lida com as mudanças de estado vindas do RideRequestProvider
   void _handleProviderStatusChange(RideRequestStatus status) {
     if (!mounted) return;
-    print(
-      "SearchingDriverDialog: Provider status mudou para $status. Countdown: $_countdown",
-    );
 
     if (status == RideRequestStatus.driverFound) {
       _timer?.cancel();
       _canRetryButtonBeActive = false;
-      if (mounted)
-        setState(() {}); // Garante que o botão "De Novo" atualize o estado
+      setState(() {});
       _foundAnimationController.forward();
       Future.delayed(const Duration(seconds: 2), () {
-        // Tempo para o utilizador ver a mensagem
         if (mounted) {
-          Navigator.of(context).pop(true); // Retorna true indicando sucesso
+          Navigator.of(context).pop(true);
         }
       });
     } else if (status == RideRequestStatus.notFound) {
-      _timer?.cancel(); // Para o timer se o provider indicar que não encontrou
-      if (mounted) {
-        setState(() {
-          _canRetryButtonBeActive = true; // Permite tentar de novo
-        });
-      }
+      _timer?.cancel();
+      setState(() {
+        _canRetryButtonBeActive = true;
+      });
     } else if (status == RideRequestStatus.searchingDriver) {
-      // Se o estado voltar para searching (ex: após um retry), reinicia o timer
       if (!(_timer?.isActive ?? false)) {
         _startTimer();
       }
     } else if (status == RideRequestStatus.error ||
         status == RideRequestStatus.none) {
-      // Se houver erro ou o estado for resetado (ex: cancelado pelo provider), fecha o diálogo
       _timer?.cancel();
       if (mounted && Navigator.canPop(context)) {
-        // Verifica se pode dar pop
-        Navigator.of(
-          context,
-        ).pop(false); // Retorna false indicando falha/cancelamento
+        Navigator.of(context).pop(false);
       }
     }
   }
 
   void _startTimer() {
-    print("SearchingDriverDialog: Iniciando timer de 90 segundos.");
     if (mounted) {
       setState(() {
         _canRetryButtonBeActive = false;
-        _countdown = 90; // Reseta o contador
+        _countdown = 90;
       });
     }
-    _timer?.cancel(); // Cancela qualquer timer anterior
+    _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) {
         timer.cancel();
@@ -136,26 +114,17 @@ class _SearchingDriverDialogState extends State<SearchingDriverDialog>
         context,
         listen: false,
       );
-      if (mounted) {
-        setState(() {
-          if (_countdown > 0) {
-            _countdown--;
-          } else {
-            timer.cancel();
-            _canRetryButtonBeActive = true;
-            // Se o tempo esgotou e o provider ainda está a procurar,
-            // o provider DEVE mudar o seu próprio estado para notFound.
-            // Este diálogo apenas reage ao estado do provider.
-            if (rideProvider.status == RideRequestStatus.searchingDriver) {
-              print(
-                "SearchingDriverDialog: Timer esgotado, provider ainda em searchingDriver. O provider deve mudar para notFound.",
-              );
-              // Opcional: Forçar o provider a mudar para notFound se ele não o fizer sozinho
-              // rideProvider.searchTimeout(); // Método a ser criado no provider
-            }
+      setState(() {
+        if (_countdown > 0) {
+          _countdown--;
+        } else {
+          timer.cancel();
+          _canRetryButtonBeActive = true;
+          if (rideProvider.status == RideRequestStatus.searchingDriver) {
+            // O provider deve mudar para notFound; se quiser, pode forçar aqui.
           }
-        });
-      }
+        }
+      });
     });
   }
 
@@ -163,7 +132,6 @@ class _SearchingDriverDialogState extends State<SearchingDriverDialog>
   void dispose() {
     _timer?.cancel();
     _foundAnimationController.dispose();
-    // Remove o listener ao sair
     if (_providerListener != null) {
       Provider.of<RideRequestProvider>(
         context,
@@ -175,17 +143,10 @@ class _SearchingDriverDialogState extends State<SearchingDriverDialog>
 
   @override
   Widget build(BuildContext context) {
-    // Ouve o RideRequestProvider para o estado atual da busca
-    // Não precisamos de um Consumer aqui se já temos um listener no initState/didChangeDependencies
-    // que chama setState. Mas para consistência e para garantir que a UI sempre reflete
-    // o estado mais recente do provider, um Consumer é uma boa prática.
-    // No entanto, como _handleProviderStatusChange já chama setState,
-    // podemos apenas ler o provider aqui.
     final rideProvider = Provider.of<RideRequestProvider>(context);
-    Widget content;
     final currentStatus = rideProvider.status;
+    Widget content;
 
-    // Define o conteúdo do diálogo com base no estado do provider
     if (currentStatus == RideRequestStatus.searchingDriver) {
       content = Column(
         mainAxisSize: MainAxisSize.min,
@@ -220,7 +181,7 @@ class _SearchingDriverDialogState extends State<SearchingDriverDialog>
       content = Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
+          const Icon(
             Icons.sentiment_dissatisfied_outlined,
             color: Colors.orangeAccent,
             size: 70,
@@ -276,7 +237,6 @@ class _SearchingDriverDialogState extends State<SearchingDriverDialog>
         ),
       );
     } else {
-      // Estados como error, none, etc.
       content = Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -309,8 +269,6 @@ class _SearchingDriverDialogState extends State<SearchingDriverDialog>
           children: [
             content,
             const SizedBox(height: 30),
-            // Botões só aparecem se não encontrou ou ainda está procurando
-            // e se o entregador ainda não foi encontrado.
             if (currentStatus == RideRequestStatus.searchingDriver ||
                 currentStatus == RideRequestStatus.notFound)
               Row(
@@ -318,14 +276,11 @@ class _SearchingDriverDialogState extends State<SearchingDriverDialog>
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () {
-                        _timer?.cancel(); // Para o timer local
-                        widget
-                            .onCancelDialog(); // Chama o callback original passado ao widget
-                        // rideProvider.cancelSearch(); // O provider já deve ser notificado pelo onCancelDialog
-                        // ou o onCancelDialog pode chamar rideProvider.cancelSearch()
+                        _timer?.cancel();
+                        widget.onCancelDialog();
                       },
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white, // Cor do texto
+                        foregroundColor: Colors.white,
                         side: const BorderSide(color: Colors.white, width: 1.5),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(25.0),
@@ -344,22 +299,17 @@ class _SearchingDriverDialogState extends State<SearchingDriverDialog>
                   const SizedBox(width: 10),
                   Expanded(
                     child: ElevatedButton(
-                      // Habilita o botão "De Novo" se _canRetryButtonBeActive for true E o status for notFound
-                      onPressed:
-                          _canRetryButtonBeActive &&
-                                  currentStatus == RideRequestStatus.notFound
-                              ? () {
-                                widget
-                                    .onRetrySearch(); // Chama o callback original
-                                // rideProvider.searchForDriver(); // O onRetrySearch deve chamar isso
-                              }
-                              : null,
+                      onPressed: _canRetryButtonBeActive &&
+                              currentStatus == RideRequestStatus.notFound
+                          ? () {
+                              widget.onRetrySearch();
+                            }
+                          : null,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor:
-                            _canRetryButtonBeActive &&
-                                    currentStatus == RideRequestStatus.notFound
-                                ? Colors.white
-                                : Colors.grey.shade700,
+                        backgroundColor: _canRetryButtonBeActive &&
+                                currentStatus == RideRequestStatus.notFound
+                            ? Colors.white
+                            : Colors.grey.shade700,
                         foregroundColor: Colors.black,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(25.0),
@@ -367,7 +317,6 @@ class _SearchingDriverDialogState extends State<SearchingDriverDialog>
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                       child: Text(
-                        // Texto do botão "De Novo" ou o contador
                         _canRetryButtonBeActive &&
                                 currentStatus == RideRequestStatus.notFound
                             ? "De Novo"

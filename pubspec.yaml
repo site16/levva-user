@@ -32,6 +32,7 @@ dependencies:
   shared_preferences: ^2.0.15
   lottie: ^3.1.2
   uuid: ^4.3.3
+  geocoding: ^4.0.0
 
 dev_dependencies:
   flutter_test:
@@ -52,7 +53,9 @@ flutter:
     - assets/images/Entregador acenando.png
     - assets/images/bike_espera.png
     - assets/animations/confirmed.json
-   
+    - assets/icons/deliveryman.png
+    - assets/icons/location_marker.png
+    - assets/map_styles/map_style_silver.json
 flutter_icons:
   android: true
   ios: true

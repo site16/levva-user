@@ -1,41 +1,37 @@
-import 'dart:async'; // Para Completer
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'
-    show rootBundle; // Para carregar o JSON do estilo do mapa
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:provider/provider.dart';
+import '../providers/ride_request_provider.dart';
+import '../providers/deliveryman_provider.dart';
 
 class MapDisplay extends StatefulWidget {
-  final LatLng initialTarget;
+  final LatLng? initialTarget;
   final double initialZoom;
-  final String? customMapStyleJsonPath;
   final bool showMyLocation;
   final bool showMyLocationButton;
   final bool showZoomControls;
   final bool showCompass;
   final bool showMapToolbar;
-  final Set<Marker> markers;
-  final Set<Polyline> polylines;
-  // Callback para quando o mapa é criado e o controller está disponível
-  // Certifique-se de que o tipo é void Function(GoogleMapController controller)?
+  final Set<Marker>? markers;
+  final Set<Polyline>? polylines;
   final void Function(GoogleMapController controller)? onMapCreatedCallback;
+  final LatLngBounds? routeBoundsToFit;
 
   const MapDisplay({
     super.key,
-    this.initialTarget = const LatLng(
-      -15.3250,
-      -49.1510,
-    ), // Padrão para Goianésia
+    this.initialTarget,
     this.initialZoom = 14.0,
-    this.customMapStyleJsonPath,
     this.showMyLocation = true,
     this.showMyLocationButton = true,
     this.showZoomControls = false,
     this.showCompass = false,
     this.showMapToolbar = false,
-    this.markers = const <Marker>{},
-    this.polylines = const <Polyline>{},
+    this.markers,
+    this.polylines,
     this.onMapCreatedCallback,
-    LatLngBounds? routeBoundsToFit, // Adiciona o callback ao construtor
+    this.routeBoundsToFit, required String customMapStyleJsonPath,
   });
 
   @override
@@ -43,49 +39,76 @@ class MapDisplay extends StatefulWidget {
 }
 
 class _MapDisplayState extends State<MapDisplay> {
-  final Completer<GoogleMapController> _controllerCompleter =
-      Completer<GoogleMapController>();
+  final Completer<GoogleMapController> _controllerCompleter = Completer<GoogleMapController>();
   GoogleMapController? _mapController;
   String? _mapStyleJsonString;
+  BitmapDescriptor? _deliverymanIcon;
+  BitmapDescriptor? _locationIcon;
 
   @override
   void initState() {
     super.initState();
-    if (widget.customMapStyleJsonPath != null) {
-      _loadMapStyle();
-    }
+    _loadIcons();
+    _loadMapStyle(); // Sempre carrega o estilo silver!
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<DeliverymanProvider>(
+        context,
+        listen: false,
+      ).fetchDeliverymen();
+    });
   }
 
   Future<void> _loadMapStyle() async {
-    if (widget.customMapStyleJsonPath == null) return;
     try {
       _mapStyleJsonString = await rootBundle.loadString(
-        widget.customMapStyleJsonPath!,
+        'assets/map_styles/map_style_silver.json',
       );
       if (mounted && _mapController != null && _mapStyleJsonString != null) {
-        print(
-          "Aplicando estilo de mapa personalizado após carregamento do estilo.",
-        );
         await _mapController!.setMapStyle(_mapStyleJsonString);
       }
     } catch (e) {
-      print('Erro ao carregar estilo do mapa: $e');
+      debugPrint('Erro ao carregar estilo do mapa: $e');
     }
   }
 
-  void _onMapCreated(GoogleMapController controller) {
-    _mapController = controller; // Guarda a referência localmente
+  Future<void> _loadIcons() async {
+    try {
+      final locationIcon = await BitmapDescriptor.fromAssetImage(
+        const ImageConfiguration(size: Size(36, 36)),
+        'assets/icons/location_marker.png',
+      );
+      final deliverymanIcon = await BitmapDescriptor.fromAssetImage(
+        const ImageConfiguration(size: Size(36, 36)),
+        'assets/icons/deliveryman.png',
+      );
+      if (mounted) {
+        setState(() {
+          _locationIcon = locationIcon;
+          _deliverymanIcon = deliverymanIcon;
+        });
+      }
+    } catch (e) {
+      debugPrint('Erro ao carregar ícones: $e');
+    }
+  }
+
+  void _onMapCreated(GoogleMapController controller) async {
+    _mapController = controller;
     if (!_controllerCompleter.isCompleted) {
       _controllerCompleter.complete(controller);
     }
 
-    // Aplica o estilo JSON se já foi carregado
     if (_mapStyleJsonString != null) {
-      print("Aplicando estilo de mapa personalizado em _onMapCreated.");
-      _mapController!.setMapStyle(_mapStyleJsonString);
+      await _mapController!.setMapStyle(_mapStyleJsonString);
     }
 
-    // Chama o callback passado pela HomeScreen, se existir
+    if (widget.routeBoundsToFit != null) {
+      await Future.delayed(const Duration(milliseconds: 300));
+      await _mapController!.animateCamera(
+        CameraUpdate.newLatLngBounds(widget.routeBoundsToFit!, 80),
+      );
+    }
+
     if (widget.onMapCreatedCallback != null) {
       widget.onMapCreatedCallback!(controller);
     }
@@ -93,13 +116,37 @@ class _MapDisplayState extends State<MapDisplay> {
 
   @override
   Widget build(BuildContext context) {
+    final rideProvider = Provider.of<RideRequestProvider>(context);
+    final deliverymanProvider = Provider.of<DeliverymanProvider>(context);
+
+    // Só mostra o mapa se ambos os ícones estiverem carregados!
+    if (_deliverymanIcon == null || _locationIcon == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    // Markers dos entregadores online do backend
+    final Set<Marker> deliverymenMarkers = _getDeliverymenMarkers(
+      deliverymanProvider.deliverymenOnline,
+    );
+
+    // Markers do provider ou do widget
+    final Set<Marker> baseMarkers =
+        widget.markers ?? _getMarkersFromProvider(rideProvider);
+
+    // Junta todos os markers
+    final Set<Marker> markers = {...baseMarkers, ...deliverymenMarkers};
+    final polylines =
+        widget.polylines ?? _getPolylinesFromProvider(rideProvider);
+
     return GoogleMap(
       mapType: MapType.normal,
       initialCameraPosition: CameraPosition(
-        target: widget.initialTarget,
+        target: widget.initialTarget ??
+            rideProvider.origin?.location ??
+            const LatLng(-15.3250, -49.1510),
         zoom: widget.initialZoom,
       ),
-      onMapCreated: _onMapCreated, // Usa o método interno _onMapCreated
+      onMapCreated: _onMapCreated,
       myLocationEnabled: widget.showMyLocation,
       myLocationButtonEnabled: widget.showMyLocationButton,
       zoomControlsEnabled: widget.showZoomControls,
@@ -109,9 +156,89 @@ class _MapDisplayState extends State<MapDisplay> {
       scrollGesturesEnabled: true,
       tiltGesturesEnabled: true,
       rotateGesturesEnabled: true,
-      markers: widget.markers,
-      polylines: widget.polylines,
-      // mapId: "SEU_MAP_ID_AQUI",
+      markers: markers,
+      polylines: polylines,
     );
+  }
+
+  Set<Marker> _getMarkersFromProvider(RideRequestProvider provider) {
+    final Set<Marker> markers = {};
+    if (provider.origin != null) {
+      markers.add(
+        Marker(
+          markerId: const MarkerId('origin'),
+          position: provider.origin!.location,
+          infoWindow: const InfoWindow(title: 'Origem'),
+          icon: _locationIcon!,
+        ),
+      );
+    }
+    if (provider.destination != null) {
+      markers.add(
+        Marker(
+          markerId: const MarkerId('dest'),
+          position: provider.destination!.location,
+          infoWindow: const InfoWindow(title: 'Destino'),
+          icon: _locationIcon!,
+        ),
+      );
+    }
+    if (provider.assignedDriverLocation != null) {
+      markers.add(
+        Marker(
+          markerId: const MarkerId('driver'),
+          position: provider.assignedDriverLocation!,
+          infoWindow: const InfoWindow(title: 'Entregador'),
+          icon: _deliverymanIcon!,
+        ),
+      );
+    }
+    return markers;
+  }
+
+  Set<Polyline> _getPolylinesFromProvider(RideRequestProvider provider) {
+    final Set<Polyline> polylines = {};
+    if (provider.polylinePoints.isNotEmpty) {
+      polylines.add(
+        Polyline(
+          polylineId: const PolylineId('route'),
+          points: provider.polylinePoints,
+          color: Colors.white, // Linha da rota branca
+          width: 6,
+        ),
+      );
+    }
+    return polylines;
+  }
+
+  Set<Marker> _getDeliverymenMarkers(List deliverymen) {
+    if (_deliverymanIcon == null) return {};
+    if (deliverymen.isEmpty) {
+      // Simulação: 2 online caso lista esteja vazia
+      final base = widget.initialTarget ?? const LatLng(-15.3250, -49.1510);
+      deliverymen = [
+        Deliveryman(
+          id: 'sim1',
+          name: 'Entregador 1',
+          location: LatLng(base.latitude + 0.003, base.longitude + 0.003),
+          online: true,
+        ),
+        Deliveryman(
+          id: 'sim3',
+          name: 'Entregador 3',
+          location: LatLng(base.latitude + 0.002, base.longitude - 0.003),
+          online: true,
+        ),
+      ];
+    }
+
+    return deliverymen.map<Marker>((entregador) {
+      return Marker(
+        markerId: MarkerId('deliveryman_${entregador.id}'),
+        position: entregador.location,
+        icon: _deliverymanIcon!,
+        infoWindow: InfoWindow(title: entregador.name),
+      );
+    }).toSet();
   }
 }

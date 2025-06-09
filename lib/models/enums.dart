@@ -1,91 +1,116 @@
-// lib/models/enums.dart
-// Necessário para Color, se usado em algum enum visual
+// Enums para o app Levva
 
-// Enums fornecidos por você:
+// --- TIPOS DE SERVIÇO (Transporte de Passageiro ou Entrega de Produto) ---
+enum ServiceType {
+  passenger, // Transporte de Passageiro
+  delivery,  // Envio de Produto
+}
+
+// --- DELIVERY/VEÍCULO/PAGAMENTO ---
 enum DeliveryType {
-  levvaPlus, // Exemplo: um serviço premium ou com mais benefícios
-  levvaMoto, // Entrega/transporte padrão por moto
-  levvaRapido, // Exemplo: um serviço de entrega expressa
+  levvaPlus,   // Serviço premium/benefícios
+  levvaMoto,   // Padrão por moto
+  levvaRapido, // Entrega expressa
 }
 
 enum VehicleType {
   moto,
   bike,
-  // carro, // Exemplo: Adicione outros tipos se necessário no futuro
-  // caminhaoPequeno,
+  // carro, // Adicione outros se necessário
 }
 
+// TIPOS DE PAGAMENTO
 enum PaymentType {
   dinheiro,
-  cartaoCredito, // Mais específico
-  cartaoDebito,  // Mais específico
+  cartaoCredito,
+  cartaoDebito,
   pix,
-  carteiraLevva, cartao, // Pagamento com saldo da carteira do app
+  carteiraLevva,
+  cartao, // Pagamento via saldo Levva ou cartão
 }
 
-// Outros Enums que podem ser úteis ou já foram discutidos:
-
-// Para o status da autenticação (usado no AuthProvider)
+// --- AUTENTICAÇÃO E CADASTRO ---
 enum AuthStatus {
-  uninitialized,    // Estado inicial, antes de verificar
-  authenticated,    // Usuário logado e perfil carregado
-  authenticating,   // Processo de login/registro em andamento
-  unauthenticated,  // Usuário não logado ou deslogado
-  error,            // Ocorreu um erro na autenticação
+  uninitialized,
+  authenticated,
+  authenticating,
+  unauthenticated,
+  error,
 }
 
-// Para o formulário de cadastro de entregador
 enum DocumentType {
-  profile,          // Foto de perfil do entregador
-  cnh,              // Carteira Nacional de Habilitação
-  vehicle,          // Documento do Veículo (ex: CRLV para moto)
-  personalId,       // Documento Pessoal (ex: RG para ciclista)
-  // Adicione outros tipos de documento conforme necessário
+  profile,
+  cnh,
+  vehicle,
+  personalId,
 }
 
 enum RegistrationStatus {
-  initial,          // Estado inicial do formulário
-  loading,          // Submissão em andamento
-  success,          // Submissão bem-sucedida
-  error, idle,            // Erro na submissão
+  initial,
+  loading,
+  success,
+  error,
+  idle,
 }
 
-// Para o modelo de descontos (DiscountModel)
+// --- DESCONTOS ---
 enum DiscountType {
-  percentage,       // Desconto percentual (ex: 10% OFF)
-  fixedValue,       // Desconto de valor fixo (ex: R$5 OFF)
-  freeRide,         // Corrida grátis (pode ter um valor máximo)
-  // Adicione outros tipos se necessário
+  percentage,
+  fixedValue,
+  freeRide,
 }
 
 enum DiscountOrigin {
-  campaign,         // Campanhas promocionais gerais
-  referral,         // Programa de indicação
-  compensation,     // Compensação por algum problema
-  loyalty,          // Programa de fidelidade
-  firstRide,        // Desconto de primeira corrida
-  other,            // Outras origens
+  campaign,
+  referral,
+  compensation,
+  loyalty,
+  firstRide,
+  other,
 }
 
 enum DiscountStatus {
-  available,        // Disponível para uso
-  used,             // Já utilizado
-  expired,          // Prazo de validade expirou
-  // Adicione outros status se necessário
+  available,
+  used,
+  expired,
 }
 
-// Para ajudar a variar o visual dos cards de desconto
 enum DiscountCardTheme {
-  theme1, // Ex: Laranja/Vermelho
-  theme2, // Ex: Verde Escuro
-  theme3, // Ex: Azul
-  theme4, // Ex: Verde Claro
-  theme5, // Ex: Roxo
+  theme1,
+  theme2,
+  theme3,
+  theme4,
+  theme5,
   defaultTheme,
 }
 
-// Adicione quaisquer outros enums que seu aplicativo possa precisar.
-// Exemplo:
+// --- STATUS DE CORRIDA (detalhado, igual provider) ---
+enum RideRequestStatus {
+  none,
+  originSelected,
+  destinationSelected,
+  calculatingRoute,
+  routeCalculated,
+  selectingOptions,
+  searchingDriver,
+  driverFound,
+  driverAssigned,
+  rideAccepted,
+  driverEnRouteToPickup,
+  driverArrivedAtPickup,
+  rideInProgressToDestination,
+  rideCompleted,
+  rideCancelledByUser,
+  rideCancelledByDriver,
+  rideFailed,
+  error,
+  notFound,
+  unknown,
+}
+
+// --- Outros exemplos úteis ---
 // enum RideStatus { requested, accepted, ongoing, completed, cancelled }
 // enum UserType { passenger, driver }
 
+// Mantenha este arquivo como repositório central de enums do app Levva!
+// Adicione ou ajuste conforme crescer o app.
