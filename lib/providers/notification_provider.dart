@@ -1,19 +1,17 @@
 import 'package:flutter/material.dart';
-import '../models/notification_model.dart'; // Ajuste o caminho se necessário
-import '../services/notification_service.dart'; // Ajuste o caminho se necessário
+import '../models/notification_model.dart';
+import '../services/notification_service.dart';
 
 class NotificationProvider with ChangeNotifier {
   final NotificationService _notificationService;
+  final String userId;
 
   List<NotificationModel> _notifications = [];
   bool _isLoading = false;
   String? _errorMessage;
   int _unreadCount = 0;
 
-  NotificationProvider(this._notificationService) {
-    // Opcional: Carregar notificações ao iniciar o provider
-    // fetchNotifications();
-  }
+  NotificationProvider(this._notificationService, this.userId);
 
   // Getters
   List<NotificationModel> get notifications => _notifications;
@@ -42,15 +40,16 @@ class NotificationProvider with ChangeNotifier {
     _setLoading(true);
     _errorMessage = null;
     try {
-      _notifications = await _notificationService.getNotifications();
+      _notifications = await _notificationService.getNotifications(userId);
       _updateUnreadCount();
       print(
         "NotificationProvider: Notificações carregadas: ${_notifications.length}, Não lidas: $_unreadCount",
       );
+      notifyListeners();
     } catch (e) {
       print("NotificationProvider: Erro ao buscar notificações: $e");
       _setError("Não foi possível carregar as notificações: ${e.toString()}");
-      _notifications = []; // Limpa em caso de erro
+      _notifications = [];
       _unreadCount = 0;
     }
     _setLoading(false); // Notifica no final
@@ -64,7 +63,7 @@ class NotificationProvider with ChangeNotifier {
       _updateUnreadCount();
       notifyListeners();
       try {
-        await _notificationService.markAsRead(notificationId);
+        await _notificationService.markAsRead(userId, notificationId);
         print(
           "NotificationProvider: Notificação $notificationId marcada como lida no serviço.",
         );
@@ -76,15 +75,13 @@ class NotificationProvider with ChangeNotifier {
         _notifications[index].isRead = false;
         _updateUnreadCount();
         notifyListeners();
-        // Opcional: Mostrar um erro para o utilizador
-        // _setError("Falha ao marcar notificação como lida.");
       }
     }
   }
 
   Future<void> markAllNotificationsAsRead() async {
     bool hadUnread = _unreadCount > 0;
-    if (!hadUnread) return; // Não faz nada se já estiverem todas lidas
+    if (!hadUnread) return;
 
     // Otimisticamente atualiza a UI
     for (var notification in _notifications) {
@@ -94,7 +91,7 @@ class NotificationProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      await _notificationService.markAllAsRead();
+      await _notificationService.markAllAsRead(userId);
       print(
         "NotificationProvider: Todas as notificações marcadas como lidas no serviço.",
       );
@@ -102,10 +99,7 @@ class NotificationProvider with ChangeNotifier {
       print(
         "NotificationProvider: Erro ao marcar todas como lidas no serviço: $e",
       );
-      // Reverte se falhar (complexo, pode precisar recarregar as notificações)
-      // Por simplicidade, vamos assumir que o serviço não falha ou recarregar.
-      // Idealmente, o serviço retornaria o estado atualizado ou um booleano de sucesso.
-      await fetchNotifications(); // Recarrega para garantir consistência
+      await fetchNotifications();
     }
   }
 
@@ -116,7 +110,7 @@ class NotificationProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      await _notificationService.clearNotification(notificationId);
+      await _notificationService.clearNotification(userId, notificationId);
       print(
         "NotificationProvider: Notificação $notificationId limpa no serviço.",
       );
@@ -124,7 +118,7 @@ class NotificationProvider with ChangeNotifier {
       print(
         "NotificationProvider: Erro ao limpar notificação $notificationId no serviço: $e",
       );
-      _notifications = originalNotifications; // Restaura em caso de erro
+      _notifications = originalNotifications;
       _updateUnreadCount();
       notifyListeners();
       _setError("Falha ao limpar notificação.");
@@ -139,13 +133,13 @@ class NotificationProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      await _notificationService.clearAllNotifications();
+      await _notificationService.clearAllNotifications(userId);
       print("NotificationProvider: Todas as notificações limpas no serviço.");
     } catch (e) {
       print(
         "NotificationProvider: Erro ao limpar todas as notificações no serviço: $e",
       );
-      _notifications = originalNotifications; // Restaura em caso de erro
+      _notifications = originalNotifications;
       _updateUnreadCount();
       notifyListeners();
       _setError("Falha ao limpar todas as notificações.");

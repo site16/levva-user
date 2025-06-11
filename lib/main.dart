@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart' show FirebaseFirestore;
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart'; // ADICIONADO para FCM
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -60,6 +61,16 @@ import 'services/notification_service.dart';
 // MarkerAssets para pré-carregamento do ícone customizado
 import 'utils/marker_assets.dart';
 
+// HANDLER CORRIGIDO PARA FCM BACKGROUND:
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  if (Firebase.apps.isEmpty) {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  }
+  print('Mensagem recebida em segundo plano: ${message.messageId}');
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -77,6 +88,9 @@ void main() async {
 
   // Pré-carregue o ícone customizado ANTES do app rodar
   await MarkerAssets.preloadIcons();
+
+  // Configura FCM para mensagens em background
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
   runApp(const LevvaApp());
 }
@@ -126,12 +140,21 @@ class LevvaApp extends StatelessWidget {
               previousRideRequestProvider ??
               RideRequestProvider(googleMapsService, firestoreService),
         ),
-        ChangeNotifierProxyProvider<NotificationService, NotificationProvider>(
-          create: (context) =>
-              NotificationProvider(context.read<NotificationService>()),
-          update: (context, notificationService, previousNotificationProvider) =>
-              previousNotificationProvider ??
-              NotificationProvider(notificationService),
+        // NotificationProvider agora depende do userId autenticado para buscar notificações reais!
+        ChangeNotifierProxyProvider2<NotificationService, AuthProvider, NotificationProvider>(
+          create: (context) {
+            final authProvider = context.read<AuthProvider>();
+            return NotificationProvider(
+              context.read<NotificationService>(),
+              authProvider.currentUser?.uid ?? '',
+            );
+          },
+          update: (context, notificationService, authProvider, previous) {
+            return NotificationProvider(
+              notificationService,
+              authProvider.currentUser?.uid ?? '',
+            );
+          },
         ),
         ChangeNotifierProxyProvider2<FirestoreService, AuthService,
             RideHistoryProvider>(

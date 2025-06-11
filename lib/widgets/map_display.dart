@@ -10,8 +10,8 @@ class MapDisplay extends StatefulWidget {
   final LatLng? initialTarget;
   final double initialZoom;
   final bool showMyLocation;
-  final bool showMyLocationButton;
-  final bool showZoomControls;
+  // final bool showMyLocationButton; // removido do construtor, não faz sentido se sempre será false
+  // final bool showZoomControls; // removido do construtor, não faz sentido se sempre será false
   final bool showCompass;
   final bool showMapToolbar;
   final Set<Marker>? markers;
@@ -24,14 +24,15 @@ class MapDisplay extends StatefulWidget {
     this.initialTarget,
     this.initialZoom = 14.0,
     this.showMyLocation = true,
-    this.showMyLocationButton = true,
-    this.showZoomControls = false,
+    // this.showMyLocationButton = true, // removido
+    // this.showZoomControls = false, // removido
     this.showCompass = false,
     this.showMapToolbar = false,
     this.markers,
     this.polylines,
     this.onMapCreatedCallback,
-    this.routeBoundsToFit, required String customMapStyleJsonPath,
+    this.routeBoundsToFit,
+    required String customMapStyleJsonPath,
   });
 
   @override
@@ -49,7 +50,7 @@ class _MapDisplayState extends State<MapDisplay> {
   void initState() {
     super.initState();
     _loadIcons();
-    _loadMapStyle(); // Sempre carrega o estilo silver!
+    _loadMapStyle();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<DeliverymanProvider>(
         context,
@@ -119,21 +120,17 @@ class _MapDisplayState extends State<MapDisplay> {
     final rideProvider = Provider.of<RideRequestProvider>(context);
     final deliverymanProvider = Provider.of<DeliverymanProvider>(context);
 
-    // Só mostra o mapa se ambos os ícones estiverem carregados!
     if (_deliverymanIcon == null || _locationIcon == null) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    // Markers dos entregadores online do backend
     final Set<Marker> deliverymenMarkers = _getDeliverymenMarkers(
       deliverymanProvider.deliverymenOnline,
     );
 
-    // Markers do provider ou do widget
     final Set<Marker> baseMarkers =
         widget.markers ?? _getMarkersFromProvider(rideProvider);
 
-    // Junta todos os markers
     final Set<Marker> markers = {...baseMarkers, ...deliverymenMarkers};
     final polylines =
         widget.polylines ?? _getPolylinesFromProvider(rideProvider);
@@ -148,8 +145,8 @@ class _MapDisplayState extends State<MapDisplay> {
       ),
       onMapCreated: _onMapCreated,
       myLocationEnabled: widget.showMyLocation,
-      myLocationButtonEnabled: widget.showMyLocationButton,
-      zoomControlsEnabled: widget.showZoomControls,
+      myLocationButtonEnabled: false, // OCULTA O BOTÃO DE LOCALIZAÇÃO ATUAL
+      zoomControlsEnabled: false,     // OCULTA OS BOTÕES DE ZOOM +/-
       compassEnabled: widget.showCompass,
       mapToolbarEnabled: widget.showMapToolbar,
       zoomGesturesEnabled: true,

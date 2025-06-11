@@ -32,6 +32,7 @@ class _SearchingDriverDialogState extends State<SearchingDriverDialog>
   late Animation<double> _fadeAnimation;
 
   VoidCallback? _providerListener;
+  RideRequestProvider? _rideProvider;
 
   @override
   void initState() {
@@ -56,6 +57,7 @@ class _SearchingDriverDialogState extends State<SearchingDriverDialog>
         context,
         listen: false,
       );
+      _rideProvider = rideProvider;
       _handleProviderStatusChange(rideProvider.status);
 
       _providerListener = () {
@@ -110,17 +112,13 @@ class _SearchingDriverDialogState extends State<SearchingDriverDialog>
         timer.cancel();
         return;
       }
-      final rideProvider = Provider.of<RideRequestProvider>(
-        context,
-        listen: false,
-      );
       setState(() {
         if (_countdown > 0) {
           _countdown--;
         } else {
           timer.cancel();
           _canRetryButtonBeActive = true;
-          if (rideProvider.status == RideRequestStatus.searchingDriver) {
+          if (_rideProvider?.status == RideRequestStatus.searchingDriver) {
             // O provider deve mudar para notFound; se quiser, pode forçar aqui.
           }
         }
@@ -132,11 +130,9 @@ class _SearchingDriverDialogState extends State<SearchingDriverDialog>
   void dispose() {
     _timer?.cancel();
     _foundAnimationController.dispose();
-    if (_providerListener != null) {
-      Provider.of<RideRequestProvider>(
-        context,
-        listen: false,
-      ).removeListener(_providerListener!);
+    // Remover o listener sem usar Provider.of(context)
+    if (_providerListener != null && _rideProvider != null) {
+      _rideProvider!.removeListener(_providerListener!);
     }
     super.dispose();
   }

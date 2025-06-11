@@ -1,16 +1,16 @@
-// lib/screens/home/levva_eats/store_details_screen.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 // Ajuste os caminhos dos imports
 import '../../../models/eats_store_model.dart';
-import '../../../models/eats_product_model.dart'; // Certifique-se que este modelo foi atualizado para incluir storeName
+import '../../../models/eats_product_model.dart';
 import '../../../models/eats_addon_model.dart';
 import '../../../globals/cart_data.dart';
 import '../../../utils/favorite_service.dart';
 import './widgets/product_list_item_widget.dart';
 import './widgets/product_details_bottom_sheet.dart';
 import './cart_screen.dart';
+import './widgets/store_profile_header.dart'; // <- Novo import do header customizado!
 
 class StoreDetailsScreen extends StatefulWidget {
   static const routeName = '/levva-eats-store-details';
@@ -31,6 +31,9 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
   bool _isFavorited = false;
 
   final NumberFormat _currencyFormat = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+
+  // Dados para o header: só distância e rating
+  final double _distanceKm = 2.2;
 
   @override
   void initState() {
@@ -53,13 +56,11 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
   }
 
   void _loadAndCategorizeProducts() {
-    // Simulação de produtos.
-    // AGORA INCLUINDO storeName NA CRIAÇÃO DOS PRODUTOS
     _products = [
       EatsProductModel(
         id: 'p1',
         storeId: widget.store.id,
-        storeName: widget.store.name, // << ATUALIZADO
+        storeName: widget.store.name,
         name: 'Lanche Clássico da Casa',
         description: 'Pão, carne, queijo e salada.',
         price: 25.90,
@@ -70,7 +71,7 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
       EatsProductModel(
         id: 'p2',
         storeId: widget.store.id,
-        storeName: widget.store.name, // << ATUALIZADO
+        storeName: widget.store.name,
         name: 'Batata Canoa',
         description: 'Porção individual.',
         price: 12.50,
@@ -80,7 +81,7 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
       EatsProductModel(
         id: 'p3',
         storeId: widget.store.id,
-        storeName: widget.store.name, // << ATUALIZADO
+        storeName: widget.store.name,
         name: 'Pizza Média Pepperoni',
         description: 'Molho, queijo e pepperoni.',
         price: 42.00,
@@ -90,7 +91,7 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
       EatsProductModel(
         id: 'p4',
         storeId: widget.store.id,
-        storeName: widget.store.name, // << ATUALIZADO
+        storeName: widget.store.name,
         name: 'Suco de Laranja 500ml',
         description: 'Natural, feito na hora.',
         price: 9.00,
@@ -100,7 +101,7 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
       EatsProductModel(
         id: 'p5',
         storeId: widget.store.id,
-        storeName: widget.store.name, // << ATUALIZADO
+        storeName: widget.store.name,
         name: 'Petit Gateau',
         description: 'Com sorvete de creme.',
         price: 18.00,
@@ -144,9 +145,19 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
   }
 
   double get _cartTotalPrice {
+    // Aqui garante o cálculo correto: preço base + addons, tudo multiplicado pela quantidade do item
     return globalCartItems
         .where((item) => item.product.storeId == widget.store.id)
-        .fold(0.0, (sum, item) => sum + item.totalPrice);
+        .fold(0.0, (sum, item) {
+          // Soma o preço base do produto
+          double itemTotal = item.product.price;
+          // Soma o valor dos addons, se houver
+          if(item.selectedAddons.isNotEmpty) {
+            itemTotal += item.selectedAddons.fold(0.0, (addonSum, addon) => addonSum + addon.price);
+          }
+          // Multiplica pelo quantity
+          return sum + (itemTotal * item.quantity);
+        });
   }
 
   Future<void> _toggleFavorite() async {
@@ -161,76 +172,6 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
         content: Text(_isFavorited ? '${widget.store.name} adicionado aos favoritos!' : '${widget.store.name} removido dos favoritos.'),
         duration: const Duration(seconds: 1),
         backgroundColor: _isFavorited ? Colors.pinkAccent.shade100 : Colors.grey.shade700,
-      ),
-    );
-  }
-
-  Widget _buildStoreHeader(EatsStoreModel store) {
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-      child: Container(
-        padding: const EdgeInsets.all(16.0),
-        decoration: BoxDecoration(
-          color: Colors.grey.shade800,
-          borderRadius: BorderRadius.circular(12.0),
-          boxShadow: [ BoxShadow( color: Colors.black.withOpacity(0.15), blurRadius: 10, offset: const Offset(0, 4)) ]
-        ),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 32, backgroundColor: Colors.deepOrange.shade400,
-              child: Icon(store.logo, size: 32, color: Colors.white),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    store.name,
-                    style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: Colors.white),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (store.deliveryServiceInfo != null && store.deliveryServiceInfo!.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Icon(Icons.delivery_dining_outlined, color: Colors.orange.shade300, size: 15),
-                        const SizedBox(width: 5),
-                        Expanded(
-                          child: Text(
-                            store.deliveryServiceInfo!,
-                            style: TextStyle(fontSize: 12.5, color: Colors.orange.shade300, fontStyle: FontStyle.italic),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Icon(Icons.star, color: Colors.amber, size: 17),
-                      const SizedBox(width: 5),
-                      Text(store.rating.toStringAsFixed(1), style: const TextStyle(fontSize: 13.5, color: Colors.white, fontWeight: FontWeight.w500)),
-                    ],
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    '${store.type} • ${store.deliveryTimeEstimate}',
-                    style: TextStyle(fontSize: 13.5, color: Colors.white.withOpacity(0.9)),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -261,20 +202,21 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBodyBehindAppBar: true, // Para banner cobrir atrás da AppBar!
       backgroundColor: Colors.white,
       appBar: AppBar(
+        backgroundColor: Colors.transparent, // AppBar transparente
+        elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black87, size: 20),
           onPressed: () => Navigator.of(context).pop(),
           tooltip: 'Voltar',
         ),
-        backgroundColor: Colors.white,
-        elevation: 1.0,
         actions: [
           IconButton(
             icon: Icon(
               _isFavorited ? Icons.favorite_rounded : Icons.favorite_border_outlined,
-              color: _isFavorited ? Colors.red.shade500 : Colors.black54,
+              color: Colors.black87, // Ícone preto!
               size: 26,
             ),
             tooltip: _isFavorited ? 'Desfavoritar Loja' : 'Favoritar Loja',
@@ -283,80 +225,93 @@ class _StoreDetailsScreenState extends State<StoreDetailsScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildStoreHeader(widget.store),
-          if (_productCategories.isNotEmpty)
-            Container(
-              height: 60,
-              color: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 10.0),
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                itemCount: _productCategories.length,
+      body: NotificationListener<ScrollNotification>(
+        onNotification: (scrollInfo) {
+          // Aqui pode futuramente implementar fade/blur na AppBar ao rolar (opcional)
+          return false;
+        },
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            StoreProfileHeader(
+              store: widget.store,
+              distanceKm: _distanceKm,
+              // Não passa minOrder, reviewCount, level, levelMax!
+              deliveryTimeEstimate: widget.store.deliveryTimeEstimate,
+              deliveryFee: widget.store.deliveryFee,
+            ),
+            if (_productCategories.isNotEmpty)
+              Container(
+                height: 60,
+                color: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 10.0),
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                  itemCount: _productCategories.length,
+                  itemBuilder: (context, index) {
+                    return _buildProductCategoryChip(_productCategories[index]);
+                  },
+                ),
+              ),
+
+            if (_selectedProductCategoryName != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12.0, left: 16.0, right: 16.0, bottom: 4.0),
+                child: Text(
+                  _selectedProductCategoryName!,
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                ),
+              ),
+
+            if (_currentCategoryProducts.isEmpty)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Text(
+                    _selectedProductCategoryName == null || _categorizedProducts[_selectedProductCategoryName!] == null || _categorizedProducts[_selectedProductCategoryName!]!.isEmpty
+                        ? 'Nenhum produto nesta categoria.'
+                        : 'Carregando produtos...',
+                    style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              )
+            else
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: EdgeInsets.fromLTRB(16.0, 8.0, 16.0, _showTicketButton ? 80.0 : 16.0),
+                itemCount: _currentCategoryProducts.length,
                 itemBuilder: (context, index) {
-                  return _buildProductCategoryChip(_productCategories[index]);
-                },
-              ),
-            ),
-
-          if (_selectedProductCategoryName != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 12.0, left: 16.0, right: 16.0, bottom: 4.0),
-              child: Text(
-                _selectedProductCategoryName!,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
-              ),
-            ),
-
-          Expanded(
-            child: _currentCategoryProducts.isEmpty
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20.0),
-                      child: Text(
-                        _selectedProductCategoryName == null || _categorizedProducts[_selectedProductCategoryName!] == null || _categorizedProducts[_selectedProductCategoryName!]!.isEmpty
-                          ? 'Nenhum produto nesta categoria.'
-                          : 'Carregando produtos...',
-                        style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  )
-                : ListView.builder(
-                    padding: EdgeInsets.fromLTRB(16.0, 8.0, 16.0, _showTicketButton ? 80.0 : 16.0),
-                    itemCount: _currentCategoryProducts.length,
-                    itemBuilder: (context, index) {
-                      final product = _currentCategoryProducts[index];
-                      return ProductListItemWidget(
-                        product: product,
-                        onTap: () async {
-                          final itemAdded = await showModalBottomSheet<bool>(
-                            context: context,
-                            isScrollControlled: true,
-                            backgroundColor: Colors.white,
-                            shape: const RoundedRectangleBorder(
-                              borderRadius: BorderRadius.vertical(top: Radius.circular(20.0)),
-                            ),
-                            builder: (BuildContext btmSheetCTX) {
-                              return Padding(
-                                padding: EdgeInsets.only(bottom: MediaQuery.of(btmSheetCTX).viewInsets.bottom),
-                                child: ProductDetailsBottomSheet(product: product),
-                              );
-                            },
+                  final product = _currentCategoryProducts[index];
+                  return ProductListItemWidget(
+                    product: product,
+                    onTap: () async {
+                      final itemAdded = await showModalBottomSheet<bool>(
+                        context: context,
+                        isScrollControlled: true,
+                        backgroundColor: Colors.white,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.vertical(top: Radius.circular(20.0)),
+                        ),
+                        builder: (BuildContext btmSheetCTX) {
+                          return Padding(
+                            padding: EdgeInsets.only(bottom: MediaQuery.of(btmSheetCTX).viewInsets.bottom),
+                            child: ProductDetailsBottomSheet(product: product),
                           );
-
-                          if (itemAdded != null && mounted) {
-                            _updateTicketButtonVisibility();
-                          }
                         },
                       );
+
+                      if (itemAdded != null && mounted) {
+                        _updateTicketButtonVisibility();
+                      }
                     },
-                  ),
-          ),
-        ],
+                  );
+                },
+              ),
+          ],
+        ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       floatingActionButton: _showTicketButton

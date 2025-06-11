@@ -1,8 +1,5 @@
-// lib/models/address_model.dart
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 class AddressModel {
-  final String? id; // ID do endereço, se armazenado separadamente (ex: lista de endereços do usuário)
+  final String? id; // ID do endereço
   final String street;
   final String? number;
   final String? complement;
@@ -30,7 +27,6 @@ class AddressModel {
     this.description,
   });
 
-  // Método para criar um AddressModel a partir de um Map (geralmente vindo do Firestore)
   factory AddressModel.fromMap(Map<String, dynamic> map, {String? documentId}) {
     return AddressModel(
       id: documentId ?? map['id'],
@@ -41,14 +37,13 @@ class AddressModel {
       city: map['city'] ?? '',
       state: map['state'] ?? '',
       zipCode: map['zipCode'] ?? '',
-      country: map['country'] ?? 'Brasil', // Valor padrão se não fornecido
+      country: map['country'] ?? 'Brasil',
       latitude: (map['latitude'] as num?)?.toDouble(),
       longitude: (map['longitude'] as num?)?.toDouble(),
       description: map['description'],
     );
   }
 
-  // Método para converter um AddressModel para um Map (para salvar no Firestore)
   Map<String, dynamic> toMap() {
     return {
       if (id != null) 'id': id,
@@ -63,12 +58,10 @@ class AddressModel {
       'latitude': latitude,
       'longitude': longitude,
       'description': description,
-      // Adicionar um timestamp se for útil para rastrear quando foi adicionado/modificado
-      // 'lastUpdated': FieldValue.serverTimestamp(),
+      // 'lastUpdated': FieldValue.serverTimestamp(), // use apenas se quiser timestamp do Firestore
     };
   }
 
-  // Helper para exibir o endereço formatado (opcional)
   String get formattedAddress {
     List<String> parts = [];
     parts.add(street);
@@ -81,7 +74,6 @@ class AddressModel {
     return parts.join(', ');
   }
 
-   // Construtor de cópia com modificações (opcional, mas útil)
   AddressModel copyWith({
     String? id,
     String? street,

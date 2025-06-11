@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -27,7 +28,6 @@ class RideRequestProvider with ChangeNotifier {
   final GoogleMapsService _googleMapsService;
   final FirestoreService _firestoreService;
 
-  // --- LÓGICA DE TIPO DE SERVIÇO ---
   ServiceType _serviceType = ServiceType.passenger;
   ServiceType get serviceType => _serviceType;
   void setServiceType(ServiceType type) {
@@ -38,7 +38,6 @@ class RideRequestProvider with ChangeNotifier {
     }
   }
 
-  // --- CAMPOS DE STATUS, DADOS E FLUXO ---
   RideRequestStatus _status = RideRequestStatus.none;
   PlaceDetail? _origin;
   PlaceDetail? _destination;
@@ -56,13 +55,11 @@ class RideRequestProvider with ChangeNotifier {
   double _calculatedPrice = 0.0;
   String? _paymentChangeFor;
 
-  // Novos campos para entrega de produto
   String? _receiverName;
   String? _receiverCell;
   String? _itemType;
   String? _itemObservation;
 
-  // Detalhes do Entregador
   String? _assignedDriverId;
   String? _assignedDriverName;
   String? _assignedDriverVehicleDetails;
@@ -75,7 +72,9 @@ class RideRequestProvider with ChangeNotifier {
   String? _errorMessage;
   bool _isLoading = false;
 
-  // Getters
+  // --- Firestore order listener ---
+  StreamSubscription<DocumentSnapshot>? _orderListener;
+
   RideRequestStatus get status => _status;
   PlaceDetail? get origin => _origin;
   PlaceDetail? get destination => _destination;
@@ -103,7 +102,6 @@ class RideRequestProvider with ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool get isLoading => _isLoading;
 
-  // Getters para dados de entrega de produto
   String? get receiverName => _receiverName;
   String? get receiverCell => _receiverCell;
   String? get itemType => _itemType;
@@ -157,13 +155,43 @@ class RideRequestProvider with ChangeNotifier {
     _errorMessage = null;
     _isLoading = false;
     _serviceType = ServiceType.passenger;
-    // Limpa também campos de entrega de produto
     _receiverName = null;
     _receiverCell = null;
     _itemType = null;
     _itemObservation = null;
+    _orderListener?.cancel();
     _updateStatus(RideRequestStatus.none);
     print("RideRequestProvider: Detalhes da corrida e estado reiniciados.");
+  }
+
+  // Função de mapeamento para paymentMethod conforme backend
+  String mapPaymentType(PaymentType? type) {
+    switch (type) {
+      case PaymentType.dinheiro:
+        return 'cash';
+      case PaymentType.cartao:
+      case PaymentType.cartaoCredito:
+      case PaymentType.cartaoDebito:
+        return 'cardMachine';
+      case PaymentType.pix:
+      case PaymentType.carteiraLevva:
+        return 'online';
+      default:
+        return 'cash';
+    }
+  }
+
+  // Função de mapeamento para type conforme backend
+  String mapServiceType(DeliveryType? type) {
+    switch (type) {
+      case DeliveryType.levvaRapido:
+        return 'package';
+      case DeliveryType.levvaMoto:
+        return 'moto';
+      // Caso adicione DeliveryType.levvaFood, mapear para 'food'
+      default:
+        return 'package';
+    }
   }
 
   Future<void> setOrigin(
@@ -246,7 +274,9 @@ class RideRequestProvider with ChangeNotifier {
         sessionToken: sessionToken,
       );
     } catch (e) {
-      print("RideRequestProvider: Erro ao buscar sugestões de autocompletar: $e");
+      print(
+        "RideRequestProvider: Erro ao buscar sugestões de autocompletar: $e",
+      );
       throw e;
     }
   }
@@ -272,7 +302,9 @@ class RideRequestProvider with ChangeNotifier {
       }
       return null;
     } catch (e) {
-      print("RideRequestProvider: Erro ao obter detalhes do local pelo Place ID: $e");
+      print(
+        "RideRequestProvider: Erro ao obter detalhes do local pelo Place ID: $e",
+      );
       throw e;
     }
   }
@@ -317,7 +349,6 @@ class RideRequestProvider with ChangeNotifier {
     required PaymentType paymentType,
     required double calculatedPrice,
     String? changeFor,
-    // Novos parâmetros opcionais para entrega de produto:
     String? receiverName,
     String? receiverCell,
     String? itemType,
@@ -328,7 +359,6 @@ class RideRequestProvider with ChangeNotifier {
     _selectedPaymentType = paymentType;
     _calculatedPrice = calculatedPrice;
     _paymentChangeFor = changeFor;
-    // Salva os dados da entrega de produto, se vierem
     _receiverName = receiverName;
     _receiverCell = receiverCell;
     _itemType = itemType;
@@ -349,6 +379,7 @@ class RideRequestProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  /// Criação real do pedido no Firestore (orders)
   Future<void> requestRideAndFindDriver() async {
     if (_status != RideRequestStatus.selectingOptions ||
         _origin == null ||
@@ -358,221 +389,95 @@ class RideRequestProvider with ChangeNotifier {
       );
       return;
     }
+
     _setLoading(true, notify: false);
     _updateStatus(RideRequestStatus.searchingDriver);
     _errorMessage = null;
 
-    _currentRideId = "levva_ride_${DateTime.now().millisecondsSinceEpoch}";
-    print(
-      "RideRequestProvider: Iniciando busca por entregador para a corrida ID: $_currentRideId",
-    );
-
-    await Future.delayed(const Duration(seconds: 3));
-
-    _assignedDriverId = "driver_id_${DateTime.now().second}";
-    _assignedDriverName = _serviceType == ServiceType.passenger
-        ? "Motorista Levva"
-        : "Ana Transportes";
-    _assignedDriverVehicleDetails = _serviceType == ServiceType.passenger
-        ? "Carro Sedan - Placa LEV-0A99"
-        : "Moto Yamaha Factor - Placa LEV-0A00";
-    _assignedDriverProfileImageUrl = _serviceType == ServiceType.passenger
-        ? "https://placehold.co/100x100/4FC3F7/01579B?text=Passageiro"
-        : "https://placehold.co/100x100/D1C4E9/4527A0&text=Ana";
-    if (_origin != null) {
-      _assignedDriverLocation = LatLng(
-        _origin!.location.latitude + 0.004,
-        _origin!.location.longitude - 0.003,
-      );
+    User? currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      _setError("Usuário não autenticado.");
+      return;
     }
-    _updateStatus(RideRequestStatus.driverAssigned);
-    _setLoading(false);
 
-    print(
-      "RideRequestProvider: Entregador/Motorista ${_assignedDriverName} designado para a corrida $_currentRideId.",
-    );
-    confirmRideAcceptance();
-  }
+    try {
+      Map<String, dynamic> orderData = {
+        "userId": currentUser.uid,
+        "type": mapServiceType(_selectedDeliveryType), // <-- CORRETO!
+        "pickupAddress": _origin?.address ?? _origin?.name ?? "",
+        "pickupLatitude": _origin?.location.latitude,
+        "pickupLongitude": _origin?.location.longitude,
+        "deliveryAddress": _destination?.address ?? _destination?.name ?? "",
+        "deliveryLatitude": _destination?.location.latitude,
+        "deliveryLongitude": _destination?.location.longitude,
+        "estimatedValue": _calculatedPrice,
+        "distanceToPickup": 0.0,
+        "routeDistance": (_distanceValue ?? 0) / 1000.0,
+        "status": "pendingAcceptance",
+        "creationTime": FieldValue.serverTimestamp(),
+        "customerName": currentUser.displayName ?? "",
+        "recipientPhoneNumber": _receiverCell ?? "",
+        "receiverName": _receiverName ?? "",
+        "suitableVehicleTypes": [_selectedVehicleType?.name ?? "moto"],
+        "paymentMethod": mapPaymentType(_selectedPaymentType), // <-- CORRETO!
+        "notes": _itemObservation ?? "",
+        "driverId": null,
+      };
 
-  void confirmRideAcceptance() {
-    if (_status != RideRequestStatus.driverFound &&
-        _status != RideRequestStatus.driverAssigned) {
+      DocumentReference doc = await FirebaseFirestore.instance
+          .collection('orders')
+          .add(orderData);
+
+      _currentRideId = doc.id;
       print(
-        "RideRequestProvider: Não é possível confirmar a corrida neste estado: $_status",
+        "RideRequestProvider: Pedido criado no Firestore com id $_currentRideId",
       );
-      return;
-    }
-    _updateStatus(RideRequestStatus.rideAccepted);
-    print(
-      "RideRequestProvider: Corrida $_currentRideId aceita/confirmada. Entregador/Motorista será notificado (simulação).",
-    );
 
-    _simulateDriverToPickup();
+      listenToOrderStatus(_currentRideId!);
+
+      _updateStatus(RideRequestStatus.searchingDriver);
+      _setLoading(false);
+    } catch (e) {
+      _setError("Erro ao criar pedido no servidor: $e");
+    }
   }
 
-  Future<void> _simulateDriverToPickup() async {
-    _updateStatus(RideRequestStatus.driverEnRouteToPickup);
-    _assignedDriverEtaToPickup = "4 min";
-    notifyListeners();
-
-    print(
-      "RideRequestProvider: Entregador/Motorista a caminho da coleta. ETA: $_assignedDriverEtaToPickup",
-    );
-    for (int i = 0; i < 4; i++) {
-      if (_status != RideRequestStatus.driverEnRouteToPickup)
-        return;
-      await Future.delayed(const Duration(seconds: 3));
-      if (_origin != null && _assignedDriverLocation != null) {
-        _assignedDriverLocation = LatLng(
-          _assignedDriverLocation!.latitude -
-              (_assignedDriverLocation!.latitude - _origin!.location.latitude) *
-                  0.25,
-          _assignedDriverLocation!.longitude -
-              (_assignedDriverLocation!.longitude -
-                      _origin!.location.longitude) *
-                  0.25,
+  /// Listener em tempo real para atualizações do pedido no Firestore
+  void listenToOrderStatus(String orderId) {
+    _orderListener?.cancel();
+    _orderListener = FirebaseFirestore.instance
+        .collection('orders')
+        .doc(orderId)
+        .snapshots()
+        .listen((doc) {
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        final statusString = data['status'] as String? ?? '';
+        // Adapte para o seu enum (atenção a nomes!)
+        _status = RideRequestStatus.values.firstWhere(
+          (e) => e.name == statusString,
+          orElse: () => RideRequestStatus.rideAccepted,
         );
-      }
-      _assignedDriverEtaToPickup = "${3 - i} min";
-      if (i == 3) _assignedDriverEtaToPickup = "Chegando...";
-      notifyListeners();
-    }
-
-    if (_status != RideRequestStatus.driverEnRouteToPickup)
-      return;
-
-    _updateStatus(RideRequestStatus.driverArrivedAtPickup);
-    _assignedDriverEtaToPickup = "Chegou!";
-    if (_origin != null)
-      _assignedDriverLocation = _origin!.location;
-    notifyListeners();
-    print("RideRequestProvider: Entregador/Motorista chegou no local de coleta.");
-
-    await Future.delayed(const Duration(seconds: 4));
-    if (_status != RideRequestStatus.driverArrivedAtPickup)
-      return;
-
-    _simulateRideToDestination();
-  }
-
-  Future<void> _simulateRideToDestination() async {
-    _updateStatus(RideRequestStatus.rideInProgressToDestination);
-    _assignedDriverEtaToDestination = "8 min";
-    _assignedDriverEtaToPickup = null;
-    notifyListeners();
-    print(
-      "RideRequestProvider: Em rota para o destino. ETA: $_assignedDriverEtaToDestination",
-    );
-
-    if (_destination != null && _assignedDriverLocation != null) {
-      double startLat = _assignedDriverLocation!.latitude;
-      double startLng = _assignedDriverLocation!.longitude;
-      double endLat = _destination!.location.latitude;
-      double endLng = _destination!.location.longitude;
-
-      for (int i = 1; i <= 4; i++) {
-        if (_status != RideRequestStatus.rideInProgressToDestination) return;
-        await Future.delayed(const Duration(seconds: 4));
-        _assignedDriverLocation = LatLng(
-          startLat + (endLat - startLat) * (i / 4.0),
-          startLng + (endLng - startLng) * (i / 4.0),
-        );
-        _assignedDriverEtaToDestination = "${8 - i * 2} min";
-        if (i == 4) _assignedDriverEtaToDestination = "Chegando...";
+        _assignedDriverId = data['driverId'] as String?;
+        _assignedDriverName = data['driverName'] as String?;
+        _assignedDriverVehicleDetails = data['driverVehicleDetails'] as String?;
+        _assignedDriverProfileImageUrl = data['driverProfileImageUrl'] as String?;
+        // Se salvar localização, eta etc. do entregador no pedido, pegue aqui também:
+        // _assignedDriverLocation = ...;
+        // _assignedDriverEtaToPickup = ...;
+        // _assignedDriverEtaToDestination = ...;
         notifyListeners();
-        print(
-          "RideRequestProvider: Posição do entregador/motorista atualizada: ${_assignedDriverLocation}. ETA Destino: ${_assignedDriverEtaToDestination}",
-        );
-      }
-    } else {
-      await Future.delayed(const Duration(seconds: 16));
-    }
-
-    if (_status != RideRequestStatus.rideInProgressToDestination) return;
-
-    completeRide();
-  }
-
-  Future<void> completeRide() async {
-    _updateStatus(RideRequestStatus.rideCompleted);
-    _assignedDriverEtaToDestination = "Entrega/Viagem Concluída!";
-    if (_destination != null)
-      _assignedDriverLocation = _destination!.location;
-    notifyListeners();
-    print("RideRequestProvider: Corrida ID $_currentRideId completada!");
-
-    await _saveCurrentRideToHistory(RideHistoryStatus.completed);
-
-    Future.delayed(const Duration(seconds: 4), () {
-      if (_status == RideRequestStatus.rideCompleted) {
-        clearRideDetailsAndReset();
       }
     });
   }
 
   Future<void> cancelRideByUser() async {
-    if (_status.index >= RideRequestStatus.rideCompleted.index &&
-        _status.index <= RideRequestStatus.rideFailed.index) {
-      print(
-        "RideRequestProvider: Corrida $_currentRideId já finalizada ou formalmente cancelada, não pode cancelar novamente.",
-      );
-      return;
-    }
-
     RideRequestStatus previousStatus = _status;
     _updateStatus(RideRequestStatus.rideCancelledByUser);
     print(
       "RideRequestProvider: Corrida $_currentRideId cancelada pelo usuário.",
     );
-
-    if (_currentRideId != null &&
-        previousStatus.index >= RideRequestStatus.searchingDriver.index) {
-      await _saveCurrentRideToHistory(RideHistoryStatus.cancelled);
-    }
-
     clearRideDetailsAndReset();
-  }
-
-  Future<void> _saveCurrentRideToHistory(
-    RideHistoryStatus historyStatus,
-  ) async {
-    if (_origin == null || _destination == null || _currentRideId == null) {
-      print(
-        "RideRequestProvider: Informações insuficientes para salvar corrida no histórico.",
-      );
-      return;
-    }
-    User? currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null) {
-      print(
-        "RideRequestProvider: Usuário não logado, não é possível salvar histórico.",
-      );
-      return;
-    }
-
-    final rideDetail = RideDetailModel(
-      rideId: _currentRideId!,
-      originName: _origin!.name,
-      destinationName: _destination!.name,
-      originLocation: _origin!.location,
-      destinationLocation: _destination!.location,
-      rideDate: Timestamp.now(),
-      price: _calculatedPrice,
-      status: historyStatus,
-      driverName: _assignedDriverName,
-      vehicleDetails: _assignedDriverVehicleDetails,
-    );
-
-    try {
-      await _firestoreService.saveRideToHistory(currentUser.uid, rideDetail);
-      print(
-        "RideRequestProvider: Corrida ID ${_currentRideId} 'salva' no histórico do usuário ${currentUser.uid} com status $historyStatus.",
-      );
-    } catch (e) {
-      print(
-        "RideRequestProvider: Erro ao tentar salvar corrida ID ${_currentRideId} no histórico: $e",
-      );
-    }
   }
 
   void cancelSearchForDriver() {
@@ -588,11 +493,26 @@ class RideRequestProvider with ChangeNotifier {
       _assignedDriverVehicleDetails = null;
       _assignedDriverProfileImageUrl = null;
       _assignedDriverLocation = null;
-      print("RideRequestProvider: Busca por entregador/motorista cancelada pelo usuário.");
+      _orderListener?.cancel();
+      print(
+        "RideRequestProvider: Busca por entregador/motorista cancelada pelo usuário.",
+      );
     }
   }
 
   void setDestinationAddress(String address) {}
 
-  void setPassengerOptions({required String passengerName, required String passengerCpf, required String passengerPhone, required PaymentType paymentType, required bool isForMe}) {}
+  void setPassengerOptions({
+    required String passengerName,
+    required String passengerCpf,
+    required String passengerPhone,
+    required PaymentType paymentType,
+    required bool isForMe,
+  }) {}
+
+  @override
+  void dispose() {
+    _orderListener?.cancel();
+    super.dispose();
+  }
 }

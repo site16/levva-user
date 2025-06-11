@@ -1,1 +1,41 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"levva-app","appId":"1:672403775075:android:f6f0af5c5476b12444e256","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"levva-app","configurations":{"android":"1:672403775075:android:f6f0af5c5476b12444e256","ios":"1:672403775075:ios:e5a37a7b314f3cbb44e256","macos":"1:672403775075:ios:e5a37a7b314f3cbb44e256","web":"1:672403775075:web:25dc53ae222f4b3644e256","windows":"1:672403775075:web:b83fbd32884da90944e256"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "levva-app",
+          "appId": "1:672403775075:android:f6f0af5c5476b12444e256",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "levva-app",
+          "configurations": {
+            "android": "1:672403775075:android:f6f0af5c5476b12444e256",
+            "ios": "1:672403775075:ios:e5a37a7b314f3cbb44e256",
+            "macos": "1:672403775075:ios:e5a37a7b314f3cbb44e256",
+            "web": "1:672403775075:web:25dc53ae222f4b3644e256",
+            "windows": "1:672403775075:web:b83fbd32884da90944e256"
+          }
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run lint"
+      ]
+    }
+  ]
+}

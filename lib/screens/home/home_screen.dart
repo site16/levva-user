@@ -6,6 +6,8 @@ import 'package:levva/screens/home/levva_eats/eats_landing_screen.dart';
 import 'package:levva/widgets/promotional_carousel_widget.dart';
 import 'package:provider/provider.dart';
 import 'package:geolocator/geolocator.dart';
+// IMPORTAÇÃO PARA FCM
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 // Providers
 import '../../providers/auth_provider.dart';
@@ -81,6 +83,12 @@ class _HomeScreenState extends State<HomeScreen> {
         rideProvider.addListener(_rideProviderListener!);
         _handleRideStatusChange(rideProvider);
 
+        // --- INTEGRAÇÃO: Listener em tempo real do pedido ativo ---
+        if (rideProvider.currentRideId != null) {
+          rideProvider.listenToOrderStatus(rideProvider.currentRideId!);
+        }
+        // ----------------------------------------------------------
+
         final notificationProvider = Provider.of<NotificationProvider>(
           context,
           listen: false,
@@ -93,6 +101,12 @@ class _HomeScreenState extends State<HomeScreen> {
             !notificationProvider.isLoading) {
           notificationProvider.fetchNotifications();
         }
+
+        // --- ADICIONADO: PRINT DO TOKEN FCM NO LOG ---
+        FirebaseMessaging.instance.getToken().then((token) {
+          print('FCM Token do dispositivo: $token');
+        });
+        // ---------------------------------------------
       }
     });
   }
@@ -140,6 +154,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _startListeningToDriverLocation(RideRequestProvider rideProvider) {
     _stopListeningToDriverLocation();
     // Implemente a lógica real para ouvir a localização do motorista
+    // (pode ser via outro listener do Firestore se o entregador atualizar a localização)
   }
 
   void _stopListeningToDriverLocation() {
@@ -292,10 +307,11 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (BuildContext bc) => ChangeNotifierProvider.value(
-        value: rideRequestProvider,
-        child: const AddressSearchBottomSheet(),
-      ),
+      builder:
+          (BuildContext bc) => ChangeNotifierProvider.value(
+            value: rideRequestProvider,
+            child: const AddressSearchBottomSheet(),
+          ),
     );
   }
 
@@ -328,8 +344,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onServiceTap(ServiceType type) {
     setState(() => _selectedService = type);
-    Provider.of<RideRequestProvider>(context, listen: false)
-        .setServiceType(type);
+    Provider.of<RideRequestProvider>(
+      context,
+      listen: false,
+    ).setServiceType(type);
   }
 
   @override
@@ -337,21 +355,19 @@ class _HomeScreenState extends State<HomeScreen> {
     final rideRequestProvider = Provider.of<RideRequestProvider>(context);
     final notificationProvider = Provider.of<NotificationProvider>(context);
 
-    // Não passa markers do Home! Deixe o MapDisplay pegar direto do provider.
-    // Isso garante que os markers sempre usem os ícones carregados corretamente.
     Set<Polyline> currentPolylines = {};
     if (rideRequestProvider.polylinePoints.isNotEmpty &&
         (rideRequestProvider.status == RideRequestStatus.routeCalculated ||
             rideRequestProvider.status == RideRequestStatus.selectingOptions ||
             (rideRequestProvider.status.index >=
-                RideRequestStatus.rideAccepted.index &&
+                    RideRequestStatus.rideAccepted.index &&
                 rideRequestProvider.status.index <
                     RideRequestStatus.rideCompleted.index))) {
       currentPolylines.add(
         Polyline(
           polylineId: const PolylineId('route'),
           points: rideRequestProvider.polylinePoints,
-          color: Colors.white, // Linha da rota branca
+          color: Colors.white,
           width: 5,
           startCap: Cap.roundCap,
           endCap: Cap.roundCap,
@@ -372,81 +388,88 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[100],
       extendBodyBehindAppBar: true,
-      appBar: !isRideActive
-          ? AppBar(
-              backgroundColor: Colors.transparent,
-              elevation: 0.0,
-              surfaceTintColor: Colors.transparent,
-              leading: Builder(
-                builder: (BuildContext context) => IconButton(
-                  icon: const Icon(
-                    Icons.menu_rounded,
-                    size: 28,
-                    color: Colors.white,
-                  ),
-                  onPressed: () => Scaffold.of(context).openDrawer(),
-                  tooltip: MaterialLocalizations.of(context).openAppDrawerTooltip,
-                ),
-              ),
-              title: const Text(
-                'Levva',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 20,
-                ),
-              ),
-              centerTitle: true,
-              actions: [
-                Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    IconButton(
-                      icon: const Icon(
-                        Icons.notifications_none_rounded,
-                        size: 28,
-                        color: Colors.white,
+      appBar:
+          !isRideActive
+              ? AppBar(
+                backgroundColor: Colors.transparent,
+                elevation: 0.0,
+                surfaceTintColor: Colors.transparent,
+                leading: Builder(
+                  builder:
+                      (BuildContext context) => IconButton(
+                        icon: const Icon(
+                          Icons.menu_rounded,
+                          size: 28,
+                          color: Colors.white,
+                        ),
+                        onPressed: () => Scaffold.of(context).openDrawer(),
+                        tooltip:
+                            MaterialLocalizations.of(
+                              context,
+                            ).openAppDrawerTooltip,
                       ),
-                      onPressed: () => Navigator.of(context)
-                          .pushNamed(NotificationsScreen.routeName),
-                      tooltip: 'Notificações',
-                    ),
-                    if (notificationProvider.unreadCount > 0)
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: Container(
-                          padding: const EdgeInsets.all(2.5),
-                          decoration: BoxDecoration(
-                            color: Colors.redAccent,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: Colors.white,
-                              width: 1.5,
+                ),
+                title: const Text(
+                  'Levva',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                  ),
+                ),
+                centerTitle: true,
+                actions: [
+                  Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      IconButton(
+                        icon: const Icon(
+                          Icons.notifications_none_rounded,
+                          size: 28,
+                          color: Colors.white,
+                        ),
+                        onPressed:
+                            () => Navigator.of(
+                              context,
+                            ).pushNamed(NotificationsScreen.routeName),
+                        tooltip: 'Notificações',
+                      ),
+                      if (notificationProvider.unreadCount > 0)
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: Container(
+                            padding: const EdgeInsets.all(2.5),
+                            decoration: BoxDecoration(
+                              color: Colors.redAccent,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.white,
+                                width: 1.5,
+                              ),
                             ),
-                          ),
-                          constraints: const BoxConstraints(
-                            minWidth: 18,
-                            minHeight: 18,
-                          ),
-                          child: Text(
-                            '${notificationProvider.unreadCount > 9 ? "9+" : notificationProvider.unreadCount}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
+                            constraints: const BoxConstraints(
+                              minWidth: 18,
+                              minHeight: 18,
                             ),
-                            textAlign: TextAlign.center,
+                            child: Text(
+                              '${notificationProvider.unreadCount > 9 ? "9+" : notificationProvider.unreadCount}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
                           ),
                         ),
-                      ),
-                  ],
-                ),
-                const SizedBox(width: 8),
-              ],
-              shadowColor: Colors.transparent,
-            )
-          : null,
+                    ],
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                shadowColor: Colors.transparent,
+              )
+              : null,
       drawer: const AppDrawer(),
       body: Stack(
         children: <Widget>[
@@ -458,13 +481,10 @@ class _HomeScreenState extends State<HomeScreen> {
             )
           else
             MapDisplay(
-              // markers: null faz o MapDisplay buscar direto do provider, sempre com os ícones certos!
               markers: null,
               polylines: currentPolylines,
               initialTarget: _currentMapCenter!,
               initialZoom: 15.5,
-              showZoomControls: true,
-              showMyLocationButton: !isRideActive,
               showMapToolbar: false,
               onMapCreatedCallback: (GoogleMapController controller) {
                 if (!_mapControllerCompleter.isCompleted)
@@ -475,7 +495,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           if (!isRideActive)
             Positioned(
-              top: kToolbarHeight + 20, // logo abaixo do AppBar
+              top: kToolbarHeight + 20,
               left: 0,
               right: 0,
               child: Container(
@@ -522,8 +542,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               isSelected: false,
                               onTap: () {
-                                Navigator.of(context).pushNamed(
-                                    LevvaEatsLandingScreen.routeName);
+                                Navigator.of(
+                                  context,
+                                ).pushNamed(LevvaEatsLandingScreen.routeName);
                               },
                               iconSize: 32,
                               cardHeight: 100,
@@ -532,11 +553,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(height: 16),
                         InkWell(
-                          onTap: (rideRequestProvider.status ==
-                                      RideRequestStatus.calculatingRoute ||
-                                  rideRequestProvider.isLoading)
-                              ? null
-                              : () => _showAddressSearchSheet(context),
+                          onTap:
+                              (rideRequestProvider.status ==
+                                          RideRequestStatus.calculatingRoute ||
+                                      rideRequestProvider.isLoading)
+                                  ? null
+                                  : () => _showAddressSearchSheet(context),
                           child: Container(
                             height: 48,
                             padding: const EdgeInsets.symmetric(
@@ -564,11 +586,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                         'Para onde você vai?',
                                     style: TextStyle(
                                       fontSize: 14.5,
-                                      color: rideRequestProvider
-                                                  .destination?.name !=
-                                              null
-                                          ? Colors.black87
-                                          : Colors.grey.shade600,
+                                      color:
+                                          rideRequestProvider
+                                                      .destination
+                                                      ?.name !=
+                                                  null
+                                              ? Colors.black87
+                                              : Colors.grey.shade600,
                                     ),
                                     overflow: TextOverflow.ellipsis,
                                     maxLines: 1,
@@ -645,8 +669,9 @@ class _HomeScreenState extends State<HomeScreen> {
         width: iconSize,
         height: iconSize,
         fit: BoxFit.contain,
-        errorBuilder: (context, error, stackTrace) =>
-            Icon(Icons.storefront, color: Colors.grey, size: iconSize),
+        errorBuilder:
+            (context, error, stackTrace) =>
+                Icon(Icons.storefront, color: Colors.grey, size: iconSize),
       );
     } else if (iconData != null) {
       iconWidget = Icon(iconData, color: contentColor, size: iconSize);

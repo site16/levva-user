@@ -1,111 +1,69 @@
-import 'package:cloud_firestore/cloud_firestore.dart'; // Para Timestamp
-import '../models/notification_model.dart'; // Importa o modelo
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../models/notification_model.dart';
 
 class NotificationService {
-  // Lista simulada de notificações
-  final List<NotificationModel> _simulatedNotifications = [
-    NotificationModel(
-      id: '1',
-      title: 'Bem-vindo ao Levva!',
-      message:
-          'Explore todas as funcionalidades e comece a pedir as suas entregas.',
-      timestamp: Timestamp.now(),
-      type: NotificationType.sistema,
-    ),
-    NotificationModel(
-      id: '2',
-      title: 'Promoção de Lançamento!',
-      message:
-          'Use o código LEVVA10 e ganhe 10% de desconto na sua primeira entrega.',
-      timestamp: Timestamp.fromDate(
-        DateTime.now().subtract(const Duration(hours: 2)),
-      ),
-      type: NotificationType.promocao,
-      isRead: true, // Exemplo de notificação já lida
-    ),
-    NotificationModel(
-      id: '3',
-      title: 'Sua Levva a Caminho!',
-      message:
-          'O entregador Carlos Silva está a caminho para coletar o seu pedido.',
-      timestamp: Timestamp.fromDate(
-        DateTime.now().subtract(const Duration(days: 1)),
-      ),
-      type: NotificationType.corrida,
-      rideId: 'corrida_xyz_123',
-    ),
-    NotificationModel(
-      id: '4',
-      title: 'Entrega Concluída',
-      message:
-          'A sua Levva para a Rua Principal, 123 foi concluída com sucesso. Avalie o entregador!',
-      timestamp: Timestamp.fromDate(
-        DateTime.now().subtract(const Duration(days: 2)),
-      ),
-      type: NotificationType.corrida,
-      rideId: 'corrida_abc_789',
-      isRead: true,
-    ),
-    NotificationModel(
-      id: '5',
-      title: 'Atualização Importante',
-      message: 'Adicionámos novas áreas de cobertura na sua cidade. Confira!',
-      timestamp: Timestamp.fromDate(
-        DateTime.now().subtract(const Duration(minutes: 30)),
-      ),
-      type: NotificationType.sistema,
-    ),
-  ];
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  // Simula a obtenção de notificações
-  Future<List<NotificationModel>> getNotifications() async {
-    // Numa app real, isto viria do Firebase Cloud Messaging,
-    // de uma base de dados local (SQLite) ou de um backend.
-    await Future.delayed(
-      const Duration(milliseconds: 500),
-    ); // Simula latência da rede
-    // Retorna uma cópia para evitar modificações diretas na lista simulada
-    return List<NotificationModel>.from(
-      _simulatedNotifications.reversed,
-    ); // Mais recentes primeiro
+  /// Busca todas as notificações reais do Firestore para o usuário autenticado.
+  Future<List<NotificationModel>> getNotifications(String userId) async {
+    final snapshot = await _db
+        .collection('users')
+        .doc(userId)
+        .collection('notifications')
+        .orderBy('timestamp', descending: true)
+        .get();
+
+    return snapshot.docs
+        .map((doc) => NotificationModel.fromFirestore(doc))
+        .toList();
   }
 
-  // Simula marcar uma notificação como lida
-  Future<void> markAsRead(String notificationId) async {
-    await Future.delayed(const Duration(milliseconds: 100));
-    final index = _simulatedNotifications.indexWhere(
-      (n) => n.id == notificationId,
-    );
-    if (index != -1) {
-      _simulatedNotifications[index].isRead = true;
-      print(
-        "NotificationService: Notificação $notificationId marcada como lida (simulado).",
-      );
+  /// Marca uma notificação como lida no Firestore.
+  Future<void> markAsRead(String userId, String notificationId) async {
+    await _db
+        .collection('users')
+        .doc(userId)
+        .collection('notifications')
+        .doc(notificationId)
+        .update({'isRead': true});
+  }
+
+  /// Marca todas as notificações como lidas no Firestore.
+  Future<void> markAllAsRead(String userId) async {
+    final batch = _db.batch();
+    final query = await _db
+        .collection('users')
+        .doc(userId)
+        .collection('notifications')
+        .where('isRead', isEqualTo: false)
+        .get();
+    for (var doc in query.docs) {
+      batch.update(doc.reference, {'isRead': true});
     }
+    await batch.commit();
   }
 
-  // Simula marcar todas como lidas
-  Future<void> markAllAsRead() async {
-    await Future.delayed(const Duration(milliseconds: 200));
-    for (var notification in _simulatedNotifications) {
-      notification.isRead = true;
+  /// Remove uma notificação específica do Firestore.
+  Future<void> clearNotification(String userId, String notificationId) async {
+    await _db
+        .collection('users')
+        .doc(userId)
+        .collection('notifications')
+        .doc(notificationId)
+        .delete();
+  }
+
+  /// Remove todas as notificações do Firestore.
+  Future<void> clearAllNotifications(String userId) async {
+    final batch = _db.batch();
+    final query = await _db
+        .collection('users')
+        .doc(userId)
+        .collection('notifications')
+        .get();
+    for (var doc in query.docs) {
+      batch.delete(doc.reference);
     }
-    print(
-      "NotificationService: Todas as notificações marcadas como lidas (simulado).",
-    );
-  }
-
-  // Simula limpar todas as notificações
-  Future<void> clearAllNotifications() async {
-    await Future.delayed(const Duration(milliseconds: 200));
-    _simulatedNotifications.clear();
-    print("NotificationService: Todas as notificações limpas (simulado).");
-  }
-
-  // Simula limpar uma notificação específica
-  Future<void> clearNotification(String notificationId) async {
-    await Future.delayed(const Duration(milliseconds: 100));
-    _simulatedNotifications.removeWhere((n) => n.id == notificationId);
-    print("NotificationService: Notificação $notificationId limpa (simulado).");
+    await batch.commit();
   }
 }

@@ -17,6 +17,7 @@ class AuthProvider with ChangeNotifier {
   String? _errorMessage;
   bool _isUserFetched = false;
 
+  // Getter padrão usado no resto do app
   AppUser? get currentUser => _currentUserModel;
   AuthStatus get authStatus => _authStatus;
   bool get isLoading => _isLoading;
