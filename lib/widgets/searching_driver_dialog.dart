@@ -119,7 +119,8 @@ class _SearchingDriverDialogState extends State<SearchingDriverDialog>
           timer.cancel();
           _canRetryButtonBeActive = true;
           if (_rideProvider?.status == RideRequestStatus.searchingDriver) {
-            // O provider deve mudar para notFound; se quiser, pode forçar aqui.
+            // Aqui você pode forçar o status para notFound se desejar
+            //_rideProvider?._updateStatus(RideRequestStatus.notFound);
           }
         }
       });
@@ -130,7 +131,7 @@ class _SearchingDriverDialogState extends State<SearchingDriverDialog>
   void dispose() {
     _timer?.cancel();
     _foundAnimationController.dispose();
-    // Remover o listener sem usar Provider.of(context)
+    // Remove o listener do provider
     if (_providerListener != null && _rideProvider != null) {
       _rideProvider!.removeListener(_providerListener!);
     }
@@ -166,7 +167,7 @@ class _SearchingDriverDialogState extends State<SearchingDriverDialog>
           Text(
             "$_countdown s",
             style: TextStyle(
-              color: Colors.grey.shade300,
+              color: Colors.grey,
               fontSize: 16,
               fontWeight: FontWeight.bold,
             ),
@@ -195,7 +196,7 @@ class _SearchingDriverDialogState extends State<SearchingDriverDialog>
           const SizedBox(height: 10),
           Text(
             "Tente novamente ou cancele.",
-            style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+            style: TextStyle(color: Colors.grey, fontSize: 14),
           ),
         ],
       );

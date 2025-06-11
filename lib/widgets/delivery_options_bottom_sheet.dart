@@ -189,9 +189,15 @@ class _DeliveryOptionsBottomSheetState
             : null,
       );
 
-      rideProvider.requestRideAndFindDriver();
+      final success = await rideProvider.requestRideAndFindDriver();
       Navigator.pop(context);
-      _showSearchingDialog(context, rideProvider);
+      if (success && rideProvider.status == RideRequestStatus.searchingDriver) {
+        _showSearchingDialog(context, rideProvider);
+      } else if (!success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(rideProvider.errorMessage ?? 'Erro ao criar pedido')),
+        );
+      }
       return;
     }
 
@@ -234,9 +240,15 @@ class _DeliveryOptionsBottomSheetState
           : null,
     );
 
-    rideProvider.requestRideAndFindDriver();
+    final success = await rideProvider.requestRideAndFindDriver();
     Navigator.pop(context);
-    _showSearchingDialog(context, rideProvider);
+    if (success && rideProvider.status == RideRequestStatus.searchingDriver) {
+      _showSearchingDialog(context, rideProvider);
+    } else if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(rideProvider.errorMessage ?? 'Erro ao criar pedido')),
+      );
+    }
   }
 
   @override
@@ -288,7 +300,6 @@ class _DeliveryOptionsBottomSheetState
               const SizedBox(height: 18),
 
               if (rideProvider.serviceType == ServiceType.passenger) ...[
-                // --------- FORM PASSAGEIRO ---------
                 const SectionTitle('Quem vai?'),
                 Row(
                   children: [
@@ -461,7 +472,6 @@ class _DeliveryOptionsBottomSheetState
                 ),
                 const SizedBox(height: 10),
               ] else ...[
-                // ----------- ENVIAR: FORMULARIO DE ENTREGA COMPLETO -----------
                 const SectionTitle('Tipo de Veículo'),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,

@@ -10,8 +10,6 @@ class MapDisplay extends StatefulWidget {
   final LatLng? initialTarget;
   final double initialZoom;
   final bool showMyLocation;
-  // final bool showMyLocationButton; // removido do construtor, não faz sentido se sempre será false
-  // final bool showZoomControls; // removido do construtor, não faz sentido se sempre será false
   final bool showCompass;
   final bool showMapToolbar;
   final Set<Marker>? markers;
@@ -24,8 +22,6 @@ class MapDisplay extends StatefulWidget {
     this.initialTarget,
     this.initialZoom = 14.0,
     this.showMyLocation = true,
-    // this.showMyLocationButton = true, // removido
-    // this.showZoomControls = false, // removido
     this.showCompass = false,
     this.showMapToolbar = false,
     this.markers,
@@ -145,8 +141,8 @@ class _MapDisplayState extends State<MapDisplay> {
       ),
       onMapCreated: _onMapCreated,
       myLocationEnabled: widget.showMyLocation,
-      myLocationButtonEnabled: false, // OCULTA O BOTÃO DE LOCALIZAÇÃO ATUAL
-      zoomControlsEnabled: false,     // OCULTA OS BOTÕES DE ZOOM +/-
+      myLocationButtonEnabled: false,
+      zoomControlsEnabled: false,
       compassEnabled: widget.showCompass,
       mapToolbarEnabled: widget.showMapToolbar,
       zoomGesturesEnabled: true,
@@ -200,7 +196,7 @@ class _MapDisplayState extends State<MapDisplay> {
         Polyline(
           polylineId: const PolylineId('route'),
           points: provider.polylinePoints,
-          color: Colors.white, // Linha da rota branca
+          color: Colors.white,
           width: 6,
         ),
       );
@@ -208,34 +204,19 @@ class _MapDisplayState extends State<MapDisplay> {
     return polylines;
   }
 
+  /// Real: Mostra apenas entregadores online reais próximos (não simulação)
   Set<Marker> _getDeliverymenMarkers(List deliverymen) {
     if (_deliverymanIcon == null) return {};
-    if (deliverymen.isEmpty) {
-      // Simulação: 2 online caso lista esteja vazia
-      final base = widget.initialTarget ?? const LatLng(-15.3250, -49.1510);
-      deliverymen = [
-        Deliveryman(
-          id: 'sim1',
-          name: 'Entregador 1',
-          location: LatLng(base.latitude + 0.003, base.longitude + 0.003),
-          online: true,
-        ),
-        Deliveryman(
-          id: 'sim3',
-          name: 'Entregador 3',
-          location: LatLng(base.latitude + 0.002, base.longitude - 0.003),
-          online: true,
-        ),
-      ];
-    }
+    if (deliverymen.isEmpty) return {};
 
-    return deliverymen.map<Marker>((entregador) {
-      return Marker(
-        markerId: MarkerId('deliveryman_${entregador.id}'),
-        position: entregador.location,
-        icon: _deliverymanIcon!,
-        infoWindow: InfoWindow(title: entregador.name),
-      );
-    }).toSet();
+    return deliverymen
+        .where((entregador) => entregador.online == true && entregador.location != null)
+        .map<Marker>((entregador) => Marker(
+              markerId: MarkerId('deliveryman_${entregador.id}'),
+              position: entregador.location,
+              icon: _deliverymanIcon!,
+              infoWindow: InfoWindow(title: entregador.name),
+            ))
+        .toSet();
   }
 }

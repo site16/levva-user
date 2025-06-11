@@ -385,14 +385,14 @@ class RideRequestProvider with ChangeNotifier {
   }
 
   /// Criação real do pedido no Firestore (orders)
-  Future<void> requestRideAndFindDriver() async {
+  Future<bool> requestRideAndFindDriver() async {
     if (_status != RideRequestStatus.selectingOptions ||
         _origin == null ||
         _destination == null) {
       _setError(
         "Complete a seleção de origem, destino e opções de entrega primeiro.",
       );
-      return;
+      return false;
     }
 
     _setLoading(true, notify: false);
@@ -402,7 +402,7 @@ class RideRequestProvider with ChangeNotifier {
     User? currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) {
       _setError("Usuário não autenticado.");
-      return;
+      return false;
     }
 
     try {
@@ -455,8 +455,10 @@ class RideRequestProvider with ChangeNotifier {
 
       _updateStatus(RideRequestStatus.searchingDriver);
       _setLoading(false);
+      return true;
     } catch (e) {
       _setError("Erro ao criar pedido no servidor: $e");
+      return false;
     }
   }
 
