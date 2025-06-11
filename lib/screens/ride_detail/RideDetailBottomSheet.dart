@@ -8,9 +8,7 @@ import 'package:levva/providers/ride_request_provider.dart';
 import '../../models/ride_detail_model.dart'; // Seu modelo
 import '../../models/enums.dart'; // Para RideRequestStatus
 import '../../widgets/map_display.dart'; // Seu widget de mapa
-// import '../home/levva_eats/store_details_screen.dart'; // Se for navegar para detalhes da loja
 
-// Widget SectionTitle (mantido ou movido para um local comum)
 class SectionTitle extends StatelessWidget {
   final String title;
   const SectionTitle(this.title, {super.key});
@@ -18,24 +16,21 @@ class SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(
-        top: 28.0,
-        bottom: 12.0,
-      ), // Aumentado espaçamento
+      padding: const EdgeInsets.only(top: 28.0, bottom: 12.0),
       child: Text(
         title.toUpperCase(),
         style: Theme.of(context).textTheme.titleSmall?.copyWith(
-          fontWeight: FontWeight.bold,
-          color: Colors.black87,
-          letterSpacing: 0.8,
-        ),
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+              letterSpacing: 0.8,
+            ),
       ),
     );
   }
 }
 
 class RideDetailBottomSheet extends StatelessWidget {
-  final RideDetailModel rideData; // Assumindo não nulo
+  final RideDetailModel rideData;
   final RideRequestStatus? currentStatus;
   final bool isLiveRide;
   final String? driverName;
@@ -78,7 +73,6 @@ class RideDetailBottomSheet extends StatelessWidget {
     return "R\$ ${price.toStringAsFixed(2).replaceAll('.', ',')}";
   }
 
-  // NOVO WIDGET PARA O BANNER DE STATUS DA CORRIDA
   Widget _buildRideStatusBanner(BuildContext context) {
     if (currentStatus == null) {
       return const SizedBox.shrink();
@@ -94,8 +88,7 @@ class RideDetailBottomSheet extends StatelessWidget {
     switch (currentStatus!) {
       case RideRequestStatus.rideCompleted:
         title = 'Corrida Concluída';
-        subtitle =
-            'Finalizada em ${_formatDateTime(rideData.rideDate.toDate())}';
+        subtitle = 'Finalizada em ${_formatDateTime(rideData.rideDate.toDate())}';
         iconData = Icons.check_circle_rounded;
         bannerColor = Colors.green.withOpacity(0.1);
         contentColor = Colors.green.shade800;
@@ -104,8 +97,6 @@ class RideDetailBottomSheet extends StatelessWidget {
       case RideRequestStatus.rideCancelledByDriver:
       case RideRequestStatus.rideFailed:
         title = 'Corrida Cancelada';
-        // Você pode querer adicionar um timestamp de cancelamento ao seu RideDetailModel
-        // subtitle = 'Cancelada em HH:MM';
         iconData = Icons.cancel_rounded;
         bannerColor = Colors.red.withOpacity(0.1);
         contentColor = Colors.red.shade800;
@@ -119,16 +110,14 @@ class RideDetailBottomSheet extends StatelessWidget {
         break;
       case RideRequestStatus.driverEnRouteToPickup:
         title = 'Entregador a Caminho';
-        subtitle =
-            driverName != null ? 'Com ${driverName!}' : 'Coleta em breve';
+        subtitle = driverName != null ? 'Com ${driverName!}' : 'Coleta em breve';
         iconData = Icons.directions_bike_outlined;
         bannerColor = theme.primaryColor.withOpacity(0.1);
         contentColor = theme.primaryColorDark;
         break;
       case RideRequestStatus.driverArrivedAtPickup:
         title = 'Entregador no Local de Coleta';
-        subtitle =
-            driverName != null ? '${driverName!} chegou!' : 'Aguardando coleta';
+        subtitle = driverName != null ? '${driverName!} chegou!' : 'Aguardando coleta';
         iconData = Icons.location_on_rounded;
         bannerColor = Colors.teal.withOpacity(0.1);
         contentColor = Colors.teal.shade800;
@@ -141,8 +130,7 @@ class RideDetailBottomSheet extends StatelessWidget {
         contentColor = theme.primaryColorDark;
         break;
       default:
-        title =
-            'Status: ${currentStatus.toString().split('.').last.replaceAllMapped(RegExp(r'[A-Z]'), (match) => ' ${match.group(0)}').trim()}';
+        title = 'Status: ${currentStatus.toString().split('.').last.replaceAllMapped(RegExp(r'[A-Z]'), (match) => ' ${match.group(0)}').trim()}';
         iconData = Icons.info_outline_rounded;
         bannerColor = Colors.grey.shade200;
         contentColor = Colors.grey.shade800;
@@ -200,13 +188,10 @@ class RideDetailBottomSheet extends StatelessWidget {
     String? copyTooltip,
     bool highlightValue = false,
   }) {
-    // ... (seu _buildInfoRow como antes, talvez com pequenos ajustes de estilo se desejar) ...
     final theme = Theme.of(context);
     final displayValue = value ?? 'Não informado';
     return Padding(
-      padding: const EdgeInsets.symmetric(
-        vertical: 9.0,
-      ), // Espaçamento ajustado
+      padding: const EdgeInsets.symmetric(vertical: 9.0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -223,22 +208,20 @@ class RideDetailBottomSheet extends StatelessWidget {
                 Text(
                   label,
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: Colors.grey.shade700,
-                    fontSize: 12.5,
-                  ),
+                        color: Colors.grey.shade700,
+                        fontSize: 12.5,
+                      ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   displayValue,
                   style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight:
-                        highlightValue ? FontWeight.bold : FontWeight.w500,
-                    color:
-                        highlightValue
+                        fontWeight: highlightValue ? FontWeight.bold : FontWeight.w500,
+                        color: highlightValue
                             ? theme.colorScheme.primary
                             : Colors.black.withOpacity(0.87),
-                    fontSize: 14.5,
-                  ),
+                        fontSize: 14.5,
+                      ),
                 ),
               ],
             ),
@@ -250,7 +233,7 @@ class RideDetailBottomSheet extends StatelessWidget {
                 size: 19,
                 color: Colors.grey.shade600,
               ),
-              padding: const EdgeInsets.all(4), // Área de toque um pouco maior
+              padding: const EdgeInsets.all(4),
               constraints: const BoxConstraints(),
               tooltip: copyTooltip ?? "Copiar $label",
               onPressed: onCopy,
@@ -263,12 +246,6 @@ class RideDetailBottomSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
-    // rideData já é obrigatório no construtor, então não precisa de verificação de nulo aqui,
-    // a tela chamadora é que deve garantir que ele não seja nulo.
-    // Se ainda assim quiser uma segurança extra:
-    // if (rideData == null) { return Center(child: Text("Erro ao carregar dados."));}
-    // final data = rideData!; // Usado abaixo
 
     Set<Marker> markers = {};
     if (rideData.originLocation != null && originIcon != null) {
@@ -325,47 +302,37 @@ class RideDetailBottomSheet extends StatelessWidget {
         rideData.originLocation != null &&
         rideData.destinationLocation != null) {
       boundsToFit = LatLngBounds(
-        /* ... cálculo de bounds ... */
         southwest: LatLng(
-          rideData.originLocation!.latitude <
-                  rideData.destinationLocation!.latitude
+          rideData.originLocation!.latitude < rideData.destinationLocation!.latitude
               ? rideData.originLocation!.latitude
               : rideData.destinationLocation!.latitude,
-          rideData.originLocation!.longitude <
-                  rideData.destinationLocation!.longitude
+          rideData.originLocation!.longitude < rideData.destinationLocation!.longitude
               ? rideData.originLocation!.longitude
               : rideData.destinationLocation!.longitude,
         ),
         northeast: LatLng(
-          rideData.originLocation!.latitude >
-                  rideData.destinationLocation!.latitude
+          rideData.originLocation!.latitude > rideData.destinationLocation!.latitude
               ? rideData.originLocation!.latitude
               : rideData.destinationLocation!.latitude,
-          rideData.originLocation!.longitude >
-                  rideData.destinationLocation!.longitude
+          rideData.originLocation!.longitude > rideData.destinationLocation!.longitude
               ? rideData.originLocation!.longitude
               : rideData.destinationLocation!.longitude,
         ),
       );
     }
 
-    bool showConfirmationDetails =
-        isLiveRide &&
-        confirmationCode != null &&
-        confirmationCode!.isNotEmpty &&
-        (currentStatus == RideRequestStatus.driverArrivedAtPickup ||
-            currentStatus == RideRequestStatus.rideInProgressToDestination);
+    // EXIBE O CÓDIGO DE CONFIRMAÇÃO SEMPRE QUE HOUVER, não apenas durante a corrida
+    bool showConfirmationDetails = confirmationCode != null && confirmationCode!.isNotEmpty;
 
     bool canUserCancelRide =
         isLiveRide &&
         onCancelRide != null &&
         (currentStatus == RideRequestStatus.searchingDriver ||
-            // ... outras condições para cancelamento
             currentStatus == RideRequestStatus.driverEnRouteToPickup);
 
     return Material(
       color: Colors.white,
-      elevation: 0, // O ModalBottomSheet já tem sua própria elevação
+      elevation: 0,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.only(
           topLeft: Radius.circular(20.0),
@@ -376,12 +343,11 @@ class RideDetailBottomSheet extends StatelessWidget {
         constraints: BoxConstraints(
           maxHeight: MediaQuery.of(context).size.height * 0.92,
         ),
-        padding: const EdgeInsets.only(top: 8.0), // Apenas para o handle
+        padding: const EdgeInsets.only(top: 8.0),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              // Handle
               width: 48,
               height: 5,
               margin: const EdgeInsets.symmetric(vertical: 10.0),
@@ -390,23 +356,15 @@ class RideDetailBottomSheet extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
-            // Botão X foi REMOVIDO
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(
-                  22.0,
-                  0.0,
-                  22.0,
-                  20.0,
-                ), // Padding lateral ajustado
+                padding: const EdgeInsets.fromLTRB(22.0, 0.0, 22.0, 20.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (rideData.originLocation != null ||
-                        rideData.destinationLocation !=
-                            null) // Mostra mapa se houver locais
+                    if (rideData.originLocation != null || rideData.destinationLocation != null)
                       SizedBox(
-                        height: 180, // Altura do mapa reduzida
+                        height: 180,
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(12.0),
                           child: MapDisplay(
@@ -414,27 +372,23 @@ class RideDetailBottomSheet extends StatelessWidget {
                             initialZoom: 13.0,
                             markers: markers,
                             polylines: polylinesSet,
-                            routeBoundsToFit: boundsToFit, customMapStyleJsonPath: '',
-                            // customMapStyleJsonPath: 'assets/map_styles/map_style_levva.json',
+                            routeBoundsToFit: boundsToFit,
+                            customMapStyleJsonPath: '',
                           ),
                         ),
                       ),
 
-                    // NOVO BANNER DE STATUS
                     _buildRideStatusBanner(context),
 
-                    if (showConfirmationDetails) // Card do código de confirmação
+                    if (showConfirmationDetails)
                       Container(
                         margin: const EdgeInsets.only(bottom: 16.0),
                         padding: const EdgeInsets.all(16.0),
                         decoration: BoxDecoration(
-                          color: (theme.primaryColorDark ?? theme.primaryColor)
-                              .withOpacity(0.08),
+                          color: (theme.primaryColorDark ?? theme.primaryColor).withOpacity(0.08),
                           borderRadius: BorderRadius.circular(12.0),
                           border: Border.all(
-                            color: (theme.primaryColorDark ??
-                                    theme.primaryColor)
-                                .withOpacity(0.3),
+                            color: (theme.primaryColorDark ?? theme.primaryColor).withOpacity(0.3),
                           ),
                         ),
                         child: Column(
@@ -443,9 +397,7 @@ class RideDetailBottomSheet extends StatelessWidget {
                               "CÓDIGO DE ENTREGA/COLETA",
                               style: theme.textTheme.labelLarge?.copyWith(
                                 fontWeight: FontWeight.bold,
-                                color:
-                                    theme.primaryColorDark ??
-                                    theme.primaryColor,
+                                color: theme.primaryColorDark ?? theme.primaryColor,
                                 letterSpacing: 0.5,
                               ),
                             ),
@@ -460,7 +412,7 @@ class RideDetailBottomSheet extends StatelessWidget {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              "Informe este código para confirmar.",
+                              "Compartilhe este código com quem irá receber o pacote ou serviço.",
                               textAlign: TextAlign.center,
                               style: theme.textTheme.bodySmall?.copyWith(
                                 fontSize: 13,
@@ -471,9 +423,7 @@ class RideDetailBottomSheet extends StatelessWidget {
                               icon: const Icon(Icons.copy_outlined, size: 18),
                               label: const Text("Copiar Código"),
                               style: TextButton.styleFrom(
-                                foregroundColor:
-                                    theme.primaryColorDark ??
-                                    theme.primaryColor,
+                                foregroundColor: theme.primaryColorDark ?? theme.primaryColor,
                               ),
                               onPressed: () {
                                 Clipboard.setData(
@@ -518,7 +468,7 @@ class RideDetailBottomSheet extends StatelessWidget {
                       Icons.linear_scale_rounded,
                       "Trajeto",
                       "${rideData.originName} para ${rideData.destinationName}",
-                    ), // Ícone diferente para trajeto
+                    ),
                     _buildInfoRow(
                       context,
                       Icons.payments_outlined,
@@ -581,7 +531,6 @@ class RideDetailBottomSheet extends StatelessWidget {
                 ),
               ),
             ),
-            // Botão inferior foi removido
           ],
         ),
       ),

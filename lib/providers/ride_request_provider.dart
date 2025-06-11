@@ -75,6 +75,10 @@ class RideRequestProvider with ChangeNotifier {
   // --- Firestore order listener ---
   StreamSubscription<DocumentSnapshot>? _orderListener;
 
+  // Novo: Armazena o código de confirmação gerado ao criar a corrida
+  String? _confirmationCode;
+  String? get confirmationCode => _confirmationCode;
+
   RideRequestStatus get status => _status;
   PlaceDetail? get origin => _origin;
   PlaceDetail? get destination => _destination;
@@ -159,6 +163,7 @@ class RideRequestProvider with ChangeNotifier {
     _receiverCell = null;
     _itemType = null;
     _itemObservation = null;
+    _confirmationCode = null;
     _orderListener?.cancel();
     _updateStatus(RideRequestStatus.none);
     print("RideRequestProvider: Detalhes da corrida e estado reiniciados.");
@@ -401,6 +406,18 @@ class RideRequestProvider with ChangeNotifier {
     }
 
     try {
+      // Geração do código de confirmação: 4 últimos dígitos do telefone do destinatário, ou aleatório
+      String? phone = _receiverCell;
+      String confirmationCode;
+      if (phone != null && phone.replaceAll(RegExp(r'[^0-9]'), '').length >= 4) {
+        String numericPhone = phone.replaceAll(RegExp(r'[^0-9]'), '');
+        confirmationCode = numericPhone.substring(numericPhone.length - 4);
+      } else {
+        // fallback: gerar código aleatório de 4 dígitos
+        confirmationCode = (1000 + (DateTime.now().millisecondsSinceEpoch % 9000)).toString();
+      }
+      _confirmationCode = confirmationCode;
+
       Map<String, dynamic> orderData = {
         "userId": currentUser.uid,
         "type": mapServiceType(_selectedDeliveryType), // <-- CORRETO!
@@ -422,6 +439,7 @@ class RideRequestProvider with ChangeNotifier {
         "paymentMethod": mapPaymentType(_selectedPaymentType), // <-- CORRETO!
         "notes": _itemObservation ?? "",
         "driverId": null,
+        "confirmationCode": confirmationCode, // <-- NOVO CAMPO
       };
 
       DocumentReference doc = await FirebaseFirestore.instance
@@ -430,7 +448,7 @@ class RideRequestProvider with ChangeNotifier {
 
       _currentRideId = doc.id;
       print(
-        "RideRequestProvider: Pedido criado no Firestore com id $_currentRideId",
+        "RideRequestProvider: Pedido criado no Firestore com id $_currentRideId, confirmationCode=$confirmationCode",
       );
 
       listenToOrderStatus(_currentRideId!);
@@ -442,6 +460,45 @@ class RideRequestProvider with ChangeNotifier {
     }
   }
 
+  /// Mapeamento robusto: status do Firestore -> enum local RideRequestStatus
+  RideRequestStatus _statusFromFirestore(String statusString) {
+    switch (statusString) {
+      case 'pendingAcceptance':
+        return RideRequestStatus.searchingDriver;
+      case 'toPickup':
+        return RideRequestStatus.driverEnRouteToPickup;
+      case 'atPickup':
+      case 'awaitingPickup':
+        return RideRequestStatus.driverArrivedAtPickup;
+      case 'driverFound':
+        return RideRequestStatus.driverFound;
+      case 'driverAssigned':
+        return RideRequestStatus.driverAssigned;
+      case 'rideAccepted':
+        return RideRequestStatus.rideAccepted;
+      case 'toDeliver':
+      case 'atDelivery':
+        return RideRequestStatus.rideInProgressToDestination;
+      case 'completed':
+        return RideRequestStatus.rideCompleted;
+      case 'cancelledByCustomer':
+        return RideRequestStatus.rideCancelledByUser;
+      case 'cancelledByDriver':
+      case 'cancelledBySystem':
+        return RideRequestStatus.rideCancelledByDriver;
+      case 'cancellationRequested':
+        return RideRequestStatus.rideCancelledByUser;
+      default:
+        try {
+          return RideRequestStatus.values.firstWhere(
+            (e) => e.name == statusString,
+          );
+        } catch (_) {
+          return RideRequestStatus.unknown;
+        }
+    }
+  }
+
   /// Listener em tempo real para atualizações do pedido no Firestore
   void listenToOrderStatus(String orderId) {
     _orderListener?.cancel();
@@ -450,25 +507,27 @@ class RideRequestProvider with ChangeNotifier {
         .doc(orderId)
         .snapshots()
         .listen((doc) {
-      if (doc.exists) {
-        final data = doc.data() as Map<String, dynamic>;
-        final statusString = data['status'] as String? ?? '';
-        // Adapte para o seu enum (atenção a nomes!)
-        _status = RideRequestStatus.values.firstWhere(
-          (e) => e.name == statusString,
-          orElse: () => RideRequestStatus.rideAccepted,
-        );
-        _assignedDriverId = data['driverId'] as String?;
-        _assignedDriverName = data['driverName'] as String?;
-        _assignedDriverVehicleDetails = data['driverVehicleDetails'] as String?;
-        _assignedDriverProfileImageUrl = data['driverProfileImageUrl'] as String?;
-        // Se salvar localização, eta etc. do entregador no pedido, pegue aqui também:
-        // _assignedDriverLocation = ...;
-        // _assignedDriverEtaToPickup = ...;
-        // _assignedDriverEtaToDestination = ...;
-        notifyListeners();
-      }
-    });
+          if (doc.exists) {
+            final data = doc.data() as Map<String, dynamic>;
+            final statusString = data['status'] as String? ?? '';
+            _status = _statusFromFirestore(statusString);
+            _assignedDriverId = data['driverId'] as String?;
+            _assignedDriverName = data['driverName'] as String?;
+            _assignedDriverVehicleDetails =
+                data['driverVehicleDetails'] as String?;
+            _assignedDriverProfileImageUrl =
+                data['driverProfileImageUrl'] as String?;
+            // Atualizar confirmationCode, se presente, do backend
+            if (data.containsKey('confirmationCode')) {
+              _confirmationCode = data['confirmationCode'] as String?;
+            }
+            // Se salvar localização, eta etc. do entregador no pedido, pegue aqui também:
+            // _assignedDriverLocation = ...;
+            // _assignedDriverEtaToPickup = ...;
+            // _assignedDriverEtaToDestination = ...;
+            notifyListeners();
+          }
+        });
   }
 
   Future<void> cancelRideByUser() async {
